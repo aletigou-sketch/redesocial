@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Bell, Home, LogOut, MessageCircle, Plus, Search, Users, UserRound } from 'lucide-react'
 import { useAuth } from '../shared/auth/AuthContext'
+import { useProfile } from '../shared/profile/ProfileContext'
 import type { NavigationItem } from '../shared/types/navigation'
 
 interface AppShellProps {
@@ -21,10 +22,12 @@ const navItems: Array<{ id: NavigationItem; label: string; icon: typeof Home }> 
 
 export function AppShell({ activeItem, onNavigate, onSignedOut, children }: AppShellProps) {
   const { user, signOut } = useAuth()
+  const { profile, avatarUrl } = useProfile()
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [logoutError, setLogoutError] = useState('')
   const email = user?.email ?? 'Conta autenticada'
-  const initials = email.slice(0, 2).toUpperCase()
+  const displayName = profile?.display_name ?? 'Sua conta'
+  const initials = displayName.slice(0, 2).toUpperCase()
 
   async function handleSignOut() {
     if (isSigningOut) return
@@ -46,7 +49,7 @@ export function AppShell({ activeItem, onNavigate, onSignedOut, children }: AppS
         <label className="search-box" aria-disabled="true"><Search size={18} aria-hidden="true" /><input type="search" placeholder="Busca disponível em uma próxima etapa" aria-label="Buscar" disabled /><span className="foundation-badge">Em breve</span></label>
         <div className="topbar-actions">
           <button className="icon-button" aria-label="Abrir notificações" onClick={() => onNavigate('notifications')}><Bell size={20} /></button>
-          <button className="mini-profile" onClick={() => onNavigate('profile')} aria-label="Abrir seu perfil"><span className="avatar avatar-small avatar-livia">{initials}</span><span className="mini-profile-copy"><strong>Sua conta</strong><small>{email}</small></span></button>
+          <button className="mini-profile" onClick={() => onNavigate('profile')} aria-label="Abrir seu perfil"><span className="avatar avatar-small avatar-livia">{avatarUrl ? <img className="avatar-image" src={avatarUrl} alt="" /> : initials}</span><span className="mini-profile-copy"><strong>{displayName}</strong><small>{profile ? `@${profile.username}` : email}</small></span></button>
           <button className="icon-button" onClick={handleSignOut} disabled={isSigningOut} aria-label={isSigningOut ? 'Saindo da conta' : 'Sair da conta'}><LogOut size={19} /></button>
         </div>
       </header>
