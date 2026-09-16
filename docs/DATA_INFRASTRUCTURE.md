@@ -28,7 +28,7 @@ Não há `USING (true)` para dados privados. O perfil não contém e-mail, telef
 
 ## Decisões de segurança
 
-`public.is_blocked_between` usa `SECURITY DEFINER` somente porque a policy de descoberta precisa detectar bloqueios nas duas direções sem revelar quem bloqueou o usuário. A função tem `search_path` vazio, referencia objetos qualificados e sua execução é revogada de `public` e `anon`.
+`public.is_blocked_between` usa `SECURITY DEFINER` somente porque a policy de descoberta precisa detectar bloqueios nas duas direções sem revelar quem bloqueou o usuário. A identidade do solicitante é obtida internamente por `auth.uid()`: o chamador informa apenas o outro perfil, evitando consultas arbitrárias sobre relações de bloqueio entre terceiros. A função tem `search_path` vazio, referencia objetos qualificados e sua execução é revogada de `public` e `anon`.
 
 As demais funções usam o comportamento invocador padrão. Triggers existem apenas para manter `updated_at`. O caminho do avatar é validado para começar com o UUID do proprietário, e as policies de Storage repetem essa condição.
 

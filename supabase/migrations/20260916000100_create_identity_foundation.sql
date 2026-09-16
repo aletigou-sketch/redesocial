@@ -86,24 +86,27 @@ for each row execute function public.set_updated_at();
 -- A função é necessária para policies que devem considerar bloqueios nas duas
 -- direções sem revelar ao usuário quem o bloqueou. O search_path é fixado e a
 -- execução é concedida apenas ao papel authenticated.
-create function public.is_blocked_between(first_user uuid, second_user uuid)
+create function public.is_blocked_between(other_user uuid)
 returns boolean
 language sql
 stable
 security definer
 set search_path = ''
 as $$
-  select exists (
-    select 1
-    from public.user_blocks
-    where (blocker_id = first_user and blocked_id = second_user)
-       or (blocker_id = second_user and blocked_id = first_user)
-  );
+  select
+    (select auth.uid()) is not null
+    and other_user is not null
+    and exists (
+      select 1
+      from public.user_blocks
+      where (blocker_id = (select auth.uid()) and blocked_id = other_user)
+         or (blocker_id = other_user and blocked_id = (select auth.uid()))
+    );
 $$;
 
-revoke all on function public.is_blocked_between(uuid, uuid) from public;
-revoke all on function public.is_blocked_between(uuid, uuid) from anon;
-grant execute on function public.is_blocked_between(uuid, uuid) to authenticated;
+revoke all on function public.is_blocked_between(uuid) from public;
+revoke all on function public.is_blocked_between(uuid) from anon;
+grant execute on function public.is_blocked_between(uuid) to authenticated;
 
 alter table public.profiles enable row level security;
 alter table public.profiles force row level security;
@@ -125,7 +128,7 @@ to authenticated
 using (
   is_discoverable
   and (select auth.uid()) is not null
-  and not public.is_blocked_between((select auth.uid()), user_id)
+  and not public.is_blocked_between(user_id)
 );
 
 create policy profiles_insert_own
