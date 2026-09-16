@@ -20,7 +20,7 @@ function LoadingScreen() {
 }
 
 export function App() {
-  const { user, isLoading, isConfigured } = useAuth()
+  const { user, isLoading } = useAuth()
   const [activeItem, setActiveItem] = useState<NavigationItem>('home')
   const [location, setLocation] = useState(() => `${window.location.pathname}${window.location.search}`)
 
@@ -37,14 +37,15 @@ export function App() {
     if (!user && ['/app', '/admin'].includes(window.location.pathname)) navigate('/login?motivo=sessao', true)
   }, [isLoading, user])
 
-  if (isLoading) return <LoadingScreen />
-
   const path = location.split('?')[0]
-  const authView: AuthView = path === '/cadastro' ? 'signup' : path === '/recuperar-senha' ? 'forgot' : 'login'
 
   if (path === '/') {
     return <Suspense fallback={<LoadingScreen />}><LandingPage onNavigate={navigate} /></Suspense>
   }
+
+  if (isLoading) return <LoadingScreen />
+
+  const authView: AuthView = path === '/cadastro' ? 'signup' : path === '/recuperar-senha' ? 'forgot' : 'login'
 
   if (path === '/admin') {
     return (
