@@ -5,6 +5,7 @@ import { AuthProvider } from './shared/auth/AuthProvider'
 import { ProfileProvider } from './shared/profile/ProfileProvider'
 import { PresenceProvider } from './shared/presence/PresenceProvider'
 import { CallProvider } from './shared/calls/CallProvider'
+import { NotificationProvider } from './shared/notifications/NotificationProvider'
 import './styles/index.css'
 
 const root = document.getElementById('root')
@@ -16,9 +17,11 @@ createRoot(root).render(
     <AuthProvider>
       <ProfileProvider>
         <PresenceProvider>
-          <CallProvider>
-            <App />
-          </CallProvider>
+          <NotificationProvider>
+            <CallProvider>
+              <App />
+            </CallProvider>
+          </NotificationProvider>
         </PresenceProvider>
       </ProfileProvider>
     </AuthProvider>

@@ -55,7 +55,7 @@ export function App() {
       configurationFallback={<AuthPage view="login" onNavigate={navigate} />}
     >
       <AppShell activeItem={activeItem} onNavigate={setActiveItem} onSignedOut={() => navigate('/login', true)}>
-        <HomePage activeItem={activeItem} />
+        <HomePage activeItem={activeItem} onNavigate={setActiveItem} />
       </AppShell>
     </RequireAuth>
   )

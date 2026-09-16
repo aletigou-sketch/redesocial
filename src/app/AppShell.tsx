@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Bell, Home, LogOut, MessageCircle, Plus, Search, Users, UserRound } from 'lucide-react'
 import { useAuth } from '../shared/auth/AuthContext'
 import { useProfile } from '../shared/profile/ProfileContext'
+import { useNotifications } from '../shared/notifications/NotificationContext'
 import type { NavigationItem } from '../shared/types/navigation'
 
 interface AppShellProps {
@@ -23,6 +24,7 @@ const navItems: Array<{ id: NavigationItem; label: string; icon: typeof Home }> 
 export function AppShell({ activeItem, onNavigate, onSignedOut, children }: AppShellProps) {
   const { user, signOut } = useAuth()
   const { profile, avatarUrl } = useProfile()
+  const { unreadCount, refreshUnreadCount } = useNotifications()
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [logoutError, setLogoutError] = useState('')
   const email = user?.email ?? 'Conta autenticada'
@@ -48,7 +50,7 @@ export function AppShell({ activeItem, onNavigate, onSignedOut, children }: AppS
         <button className="brand" onClick={() => onNavigate('home')} aria-label="Ir para o início"><span className="brand-mark">H</span><span>Hi You!</span></button>
         <label className="search-box" aria-disabled="true"><Search size={18} aria-hidden="true" /><input type="search" placeholder="Busca disponível em uma próxima etapa" aria-label="Buscar" disabled /><span className="foundation-badge">Em breve</span></label>
         <div className="topbar-actions">
-          <button className="icon-button" aria-label="Abrir notificações" onClick={() => onNavigate('notifications')}><Bell size={20} /></button>
+          <button className="icon-button" aria-label={`Abrir notificações${unreadCount ? `, ${unreadCount} não lidas` : ''}`} onClick={() => { onNavigate('notifications'); void refreshUnreadCount() }}><Bell size={20} />{unreadCount > 0 && <span className="notification-count" aria-hidden="true">{unreadCount > 99 ? '99+' : unreadCount}</span>}</button>
           <button className="mini-profile" onClick={() => onNavigate('profile')} aria-label="Abrir seu perfil"><span className="avatar avatar-small avatar-livia">{avatarUrl ? <img className="avatar-image" src={avatarUrl} alt="" /> : initials}</span><span className="mini-profile-copy"><strong>{displayName}</strong><small>{profile ? `@${profile.username}` : email}</small></span></button>
           <button className="icon-button" onClick={handleSignOut} disabled={isSigningOut} aria-label={isSigningOut ? 'Saindo da conta' : 'Sair da conta'}><LogOut size={19} /></button>
         </div>

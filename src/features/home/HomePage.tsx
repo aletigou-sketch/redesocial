@@ -5,11 +5,12 @@ import { ProfilePage } from '../profile/ProfilePage'
 import { StoriesPage } from '../stories/StoriesPage'
 import { GroupsPage } from '../groups/GroupsPage'
 import { MessagesPage } from '../messages/MessagesPage'
+import { NotificationsPage } from '../notifications/NotificationsPage'
 import { conversations, stories } from './data'
 
-interface HomePageProps { activeItem: NavigationItem }
+interface HomePageProps { activeItem: NavigationItem; onNavigate: (item: NavigationItem) => void }
 
-export function HomePage({ activeItem }: HomePageProps) {
+export function HomePage({ activeItem, onNavigate }: HomePageProps) {
   const [composerOpen, setComposerOpen] = useState(false)
   const [liked, setLiked] = useState(false)
 
@@ -17,6 +18,7 @@ export function HomePage({ activeItem }: HomePageProps) {
   if (activeItem === 'stories') return <StoriesPage />
   if (activeItem === 'groups') return <GroupsPage />
   if (activeItem === 'messages') return <MessagesPage />
+  if (activeItem === 'notifications') return <NotificationsPage onNavigate={onNavigate} />
   if (activeItem !== 'home') return <EmptySection section={activeItem} />
 
   return (
