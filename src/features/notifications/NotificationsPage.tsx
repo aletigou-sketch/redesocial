@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bell, CheckCheck, LoaderCircle, RefreshCw } from 'lucide-react'
 import { useAuth } from '../../shared/auth/AuthContext'
+import { useNotifications } from '../../shared/notifications/NotificationContext'
 import type { NavigationItem } from '../../shared/types/navigation'
 import { fetchNotifications, markAllNotificationsRead, markNotificationRead, notificationPageSize, NotificationServiceError, subscribeToNotifications, unsubscribeFromNotifications, type Notification } from './notificationService'
 
 export function NotificationsPage({ onNavigate }: { onNavigate: (item: NavigationItem) => void }) {
   const { user, signOut } = useAuth()
+  const { refreshUnreadCount } = useNotifications()
   const [items, setItems] = useState<Notification[]>([])
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = useState('')
@@ -36,13 +38,24 @@ export function NotificationsPage({ onNavigate }: { onNavigate: (item: Navigatio
   }, [user?.id])
 
   async function read(item: Notification) {
-    if (!item.readAt) { try { await markNotificationRead(item.id); setItems((current) => current.map((value) => value.id === item.id ? { ...value, readAt: new Date().toISOString() } : value)) } catch (cause) { await handleError(cause) } }
+    if (!item.readAt) {
+      try {
+        await markNotificationRead(item.id)
+        setItems((current) => current.map((value) => value.id === item.id ? { ...value, readAt: new Date().toISOString() } : value))
+        await refreshUnreadCount()
+      } catch (cause) { await handleError(cause) }
+    }
     if (item.contextType === 'conversation') onNavigate('messages')
     if (item.contextType === 'group') onNavigate('groups')
     if (item.contextType === 'story') onNavigate('stories')
   }
   async function readAll() {
-    try { await markAllNotificationsRead(); const now = new Date().toISOString(); setItems((current) => current.map((item) => ({ ...item, readAt: item.readAt ?? now }))) } catch (cause) { await handleError(cause) }
+    try {
+      await markAllNotificationsRead()
+      const now = new Date().toISOString()
+      setItems((current) => current.map((item) => ({ ...item, readAt: item.readAt ?? now })))
+      await refreshUnreadCount()
+    } catch (cause) { await handleError(cause) }
   }
   async function more() {
     const cursor = items.at(-1); if (!cursor) return
