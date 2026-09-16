@@ -33,6 +33,22 @@ Os tokens globais definem marca, cores semânticas, superfícies, bordas, raios 
 4. Substituir demonstrações por estados de carregamento, vazio, erro e dados autorizados.
 5. Adicionar rotas protegidas e testes após a instalação das dependências.
 
+## Auditoria da fundação — Fase 02
+
+- A navegação existente permanece local e intencionalmente limitada às telas de fundação; áreas ainda não implementadas apresentam estado vazio explícito.
+- Busca, perfil, contadores, publicações, Stories, conversas e grupos exibidos na home são demonstrações locais. A busca foi desabilitada e identificada para não sugerir uma integração inexistente.
+- O controle móvel sem comportamento foi removido; a navegação inferior continua sendo o mecanismo funcional em telas pequenas.
+- Dependências usadas apenas no desenvolvimento e na compilação foram separadas das dependências de execução.
+- O Design System permanece centralizado em `src/styles/index.css`, com tokens para marca, superfícies, bordas, estados, raios e sombras.
+- Não foram adicionados banco, autenticação, APIs, integrações, rotas externas ou novas funcionalidades.
+
 ## Validações
 
-Scripts de `build`, `typecheck` e `lint` estão configurados. Não foram executados porque esta operação não possui execução arbitrária de terminal; nenhum resultado de validação é presumido.
+Os scripts de `build`, `typecheck` e `lint` estão configurados. Esta operação não dispõe de execução arbitrária de processos, portanto não registra esses scripts como executados nem presume seus resultados. A revisão estática encontrou imports coerentes, tipagem estrita habilitada e caminhos de navegação compatíveis com `NavigationItem`.
+
+## Pontos para a próxima fase
+
+1. Executar `build`, `typecheck` e `lint` em um ambiente com processos habilitados.
+2. Definir rotas reais somente quando as telas correspondentes forem implementadas.
+3. Substituir gradualmente os dados demonstrativos por contratos de dados com estados tipados de carregamento, vazio e erro.
+4. Planejar banco, autenticação e autorização separadamente, preservando a decisão de não antecipar a modelagem física nesta fase.

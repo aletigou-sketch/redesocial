@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Bell, Home, Menu, MessageCircle, Plus, Search, Users, UserRound } from 'lucide-react'
+import { Bell, Home, MessageCircle, Plus, Search, Users, UserRound } from 'lucide-react'
 import type { NavigationItem } from '../shared/types/navigation'
 
 interface AppShellProps {
@@ -21,26 +21,23 @@ export function AppShell({ activeItem, onNavigate, children }: AppShellProps) {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button className="icon-button mobile-menu" aria-label="Abrir menu">
-          <Menu size={21} />
-        </button>
         <button className="brand" onClick={() => onNavigate('home')} aria-label="Ir para o início">
           <span className="brand-mark">H</span>
           <span>Hi You!</span>
         </button>
-        <label className="search-box">
+        <label className="search-box" aria-disabled="true">
           <Search size={18} aria-hidden="true" />
-          <input type="search" placeholder="Buscar pessoas, grupos..." aria-label="Buscar" />
-          <kbd>⌘ K</kbd>
+          <input type="search" placeholder="Busca disponível em uma próxima etapa" aria-label="Buscar" disabled />
+          <span className="foundation-badge">Demonstração</span>
         </label>
         <div className="topbar-actions">
-          <button className="icon-button" aria-label="Notificações" onClick={() => onNavigate('notifications')}>
+          <button className="icon-button" aria-label="Abrir área de notificações" onClick={() => onNavigate('notifications')}>
             <Bell size={20} />
-            <span className="notification-dot" />
+            <span className="notification-dot" aria-hidden="true" />
           </button>
-          <button className="mini-profile" onClick={() => onNavigate('profile')}>
+          <button className="mini-profile" onClick={() => onNavigate('profile')} aria-label="Abrir perfil de demonstração de Lívia">
             <span className="avatar avatar-small avatar-livia">LM</span>
-            <span className="mini-profile-copy"><strong>Lívia</strong><small>@livia.m</small></span>
+            <span className="mini-profile-copy"><strong>Lívia</strong><small>perfil demonstrativo</small></span>
           </button>
         </div>
       </header>
@@ -55,9 +52,9 @@ export function AppShell({ activeItem, onNavigate, children }: AppShellProps) {
                 onClick={() => onNavigate(id)}
                 aria-current={activeItem === id ? 'page' : undefined}
               >
-                <Icon size={20} strokeWidth={activeItem === id ? 2.4 : 1.8} />
+                <Icon size={20} strokeWidth={activeItem === id ? 2.4 : 1.8} aria-hidden="true" />
                 <span>{label}</span>
-                {id === 'messages' && <span className="nav-badge">3</span>}
+                {id === 'messages' && <span className="nav-badge" aria-label="3 itens demonstrativos">3</span>}
               </button>
             ))}
           </nav>
@@ -77,8 +74,13 @@ export function AppShell({ activeItem, onNavigate, children }: AppShellProps) {
 
       <nav className="mobile-nav" aria-label="Navegação móvel">
         {navItems.slice(0, 5).map(({ id, label, icon: Icon }) => (
-          <button key={id} className={activeItem === id ? 'is-active' : ''} onClick={() => onNavigate(id)}>
-            <Icon size={21} />
+          <button
+            key={id}
+            className={activeItem === id ? 'is-active' : ''}
+            onClick={() => onNavigate(id)}
+            aria-current={activeItem === id ? 'page' : undefined}
+          >
+            <Icon size={21} aria-hidden="true" />
             <span>{label}</span>
           </button>
         ))}
