@@ -15,9 +15,15 @@ O ambiente do frontend deve fornecer:
 
 Nenhuma chave `service_role` ou outro segredo pode ser usado no frontend. Na ausência das variáveis, o cliente não é criado, o provider permanece sem sessão e as operações retornam um erro de configuração controlado.
 
-## Limitações desta fase
+## Fluxo visual e rotas
 
-A interface definitiva de cadastro, login e recuperação não foi criada porque suas decisões de UX ainda não existem. Os dados demonstrativos atuais também não foram convertidos em dados autenticados. A integração depende de o Supabase Auth estar habilitado e configurado no mesmo projeto, das URLs de redirecionamento autorizadas e das variáveis públicas acima.
+A aplicação oferece rotas públicas para `/login`, `/cadastro` e `/recuperar-senha`, além da área autenticada mínima em `/app`. Usuários autenticados são retirados das telas públicas; visitantes que tentam acessar `/app` voltam ao login com uma mensagem de sessão encerrada. Durante a recuperação da sessão, uma tela de carregamento impede decisões prematuras de navegação.
+
+Os formulários usam somente os métodos do `AuthContext`, validam e-mail e senha no frontend, bloqueiam envios duplicados e convertem erros técnicos em mensagens compreensíveis. O cadastro envia apenas e-mail e senha ao Supabase Auth; não cria perfil diretamente. O logout usa `supabase.auth.signOut()` e depende do evento oficial de mudança de sessão para limpar o estado local. A recuperação usa `resetPasswordForEmail` e preserva uma resposta neutra para não revelar a existência de contas.
+
+## Dependências e limitações
+
+A integração depende de o Supabase Auth estar habilitado e configurado no mesmo projeto, das URLs do aplicativo estarem autorizadas para redirecionamento e das variáveis públicas acima. A entrega de e-mail, confirmação de cadastro, retorno do link de recuperação, expiração real da sessão e aplicação do trigger de provisionamento só podem ser validados contra o Supabase configurado. A definição de uma nova senha após o retorno do link deverá ser concluída quando o comportamento operacional e a URL final de callback estiverem disponíveis.
 
 A migration versionada prepara o provisionamento automático do perfil e das configurações de privacidade a partir de `auth.users`, sem permitir que o frontend escolha o identificador. O cadastro somente poderá ser considerado completo quando essa migration estiver aplicada: falhas no trigger revertem a criação da identidade, enquanto login posterior e recuperação de sessão reutilizam o perfil vinculado pelo mesmo UUID.
 
