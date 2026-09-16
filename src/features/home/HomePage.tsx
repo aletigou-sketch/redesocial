@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ArrowRight, ChevronRight, Image, MapPin, MessageCircle, MoreHorizontal, Plus, Send, Users } from 'lucide-react'
 import type { NavigationItem } from '../../shared/types/navigation'
 import { ProfilePage } from '../profile/ProfilePage'
+import { StoriesPage } from '../stories/StoriesPage'
 import { conversations, stories } from './data'
 
 interface HomePageProps { activeItem: NavigationItem }
@@ -11,6 +12,7 @@ export function HomePage({ activeItem }: HomePageProps) {
   const [liked, setLiked] = useState(false)
 
   if (activeItem === 'profile') return <ProfilePage />
+  if (activeItem === 'stories') return <StoriesPage />
   if (activeItem !== 'home') return <EmptySection section={activeItem} />
 
   return (
