@@ -88,6 +88,9 @@ export async function createConversation(otherUserId: string): Promise<string> {
 
 export async function fetchMessages(conversationId: string, cursor?: Pick<Message, 'id' | 'createdAt'>): Promise<Message[]> {
   await requireSession()
+  if (!UUID_PATTERN.test(conversationId) || (cursor && (!UUID_PATTERN.test(cursor.id) || Number.isNaN(Date.parse(cursor.createdAt))))) {
+    throw new MessageServiceError('invalid_input', 'A conversa ou o cursor informado é inválido.')
+  }
   const { data, error } = await client().rpc('list_private_messages', {
     target_conversation_id: conversationId,
     cursor_created_at: cursor?.createdAt ?? null,
@@ -101,15 +104,20 @@ export async function fetchMessages(conversationId: string, cursor?: Pick<Messag
 export async function sendMessage(conversationId: string, body: string, retryId: string): Promise<Message> {
   const senderId = await requireSession()
   const normalized = body.trim()
-  if (!normalized || normalized.length > 4000) throw new MessageServiceError('invalid_input', 'A mensagem deve ter entre 1 e 4000 caracteres.')
+  if (!UUID_PATTERN.test(conversationId) || !UUID_PATTERN.test(retryId) || !normalized || normalized.length > 4000) {
+    throw new MessageServiceError('invalid_input', 'A mensagem ou a conversa informada é inválida.')
+  }
   const { data, error } = await client().rpc('send_private_message', { target_conversation_id: conversationId, message_body: normalized, retry_id: retryId })
   if (error) throw mapError(error)
   const row = (data as MessageRow[] | null)?.[0]
-  if (!row || row.sender_id !== senderId) throw new MessageServiceError('request_failed', 'A mensagem não pôde ser confirmada.')
+  if (!row || row.sender_id !== senderId || row.conversation_id !== conversationId || row.client_message_id !== retryId || row.body !== normalized) {
+    throw new MessageServiceError('request_failed', 'A mensagem não pôde ser confirmada.')
+  }
   return mapMessage(row)
 }
 
 export function subscribeToMessages(conversationId: string, onMessage: (message: Message) => void, onStatus: (connected: boolean) => void): RealtimeChannel {
+  if (!UUID_PATTERN.test(conversationId)) throw new MessageServiceError('invalid_input', 'A conversa informada é inválida.')
   return client().channel(`private-messages:${conversationId}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages', filter: `conversation_id=eq.${conversationId}` }, (payload) => onMessage(mapMessage(payload.new as MessageRow)))
     .subscribe((status) => onStatus(status === 'SUBSCRIBED'))

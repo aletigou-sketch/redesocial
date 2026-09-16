@@ -12,13 +12,13 @@ RLS está habilitada e forçada. Conversas só podem ser lidas por um dos dois p
 
 A criação e o envio passam por funções transacionais `security definer` com `search_path` vazio. A identidade do remetente é sempre derivada de `auth.uid()`. O identificador do outro perfil apenas indica o destinatário pretendido: a função exige perfil existente e descobrível, permissão para mensagens diretas e ausência de bloqueio em qualquer direção. Ele nunca substitui o participante autenticado nem concede acesso a terceiros.
 
-A função de criação usa par canônico, constraint única e bloqueio transacional para impedir conversas duplicadas concorrentes. O envio valida participação, conteúdo entre 1 e 4000 caracteres e chave de repetição UUID. Repetir a mesma tentativa retorna a mensagem já persistida em vez de criar uma cópia.
+A função de criação usa par canônico, constraint única e bloqueio transacional para impedir conversas duplicadas concorrentes. O envio valida participação, conteúdo entre 1 e 4000 caracteres e chave de repetição UUID. Repetir a mesma tentativa retorna a mensagem já persistida em vez de criar uma cópia. A migration de endurecimento `20260916000700_harden_private_messages.sql` também rejeita a reutilização dessa chave com outra conversa ou conteúdo, inclusive em concorrência.
 
 ## Consultas e tempo real
 
 A lista de conversas é obtida em uma chamada, incluindo perfil correspondente e última mensagem, sem N+1. O histórico usa cursor composto por `created_at` e `id`, ordenação determinística e páginas de até 30 itens na interface. O índice `(conversation_id, created_at desc, id desc)` atende esse acesso.
 
-A assinatura Realtime é criada apenas para a conversa selecionada e filtrada por `conversation_id`. A tabela permanece protegida por SELECT/RLS; a interface trata a assinatura apenas como transporte, nunca como autorização. A arquitetura mantém conversas e mensagens isoladas e pode receber presença ou chamadas em módulos futuros sem antecipar sua implementação.
+A assinatura Realtime é criada apenas para a conversa selecionada e filtrada por `conversation_id`. A tabela permanece protegida por SELECT/RLS; a interface trata a assinatura apenas como transporte, nunca como autorização. Respostas assíncronas e estados de canais antigos são descartados após a troca de conversa, e o carregamento inicial é mesclado com eventos recebidos durante a consulta para evitar perda ou contaminação entre históricos. A arquitetura mantém conversas e mensagens isoladas e pode receber presença ou chamadas em módulos futuros sem antecipar sua implementação.
 
 ## Limitações e validação operacional pendente
 

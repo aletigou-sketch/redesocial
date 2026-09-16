@@ -28,6 +28,8 @@ export function MessagesPage() {
   const [newParticipant, setNewParticipant] = useState('')
   const [creating, setCreating] = useState(false)
   const request = useRef(0)
+  const selectedId = useRef<string | null>(null)
+  selectedId.current = selected?.id ?? null
 
   const handleError = useCallback(async (cause: unknown, fallback: string) => {
     if (cause instanceof MessageServiceError && cause.code === 'session_expired') {
@@ -63,7 +65,7 @@ export function MessagesPage() {
     setHistoryStatus('loading')
     void fetchMessages(conversationId).then((result) => {
       if (request.current !== currentRequest) return
-      setMessages(result)
+      setMessages((current) => mergeMessages(result, current.filter((message) => message.conversationId === conversationId)))
       setHasOlder(result.length === messagePageSize)
       setHistoryStatus('idle')
     }).catch(async (cause) => {
@@ -73,21 +75,29 @@ export function MessagesPage() {
     })
 
     const channel = subscribeToMessages(conversationId, (message) => {
-      if (request.current === currentRequest) setMessages((current) => mergeMessages(current, [message]))
-    }, setConnected)
+      if (request.current === currentRequest && message.conversationId === conversationId) {
+        setMessages((current) => mergeMessages(current, [message]))
+      }
+    }, (isConnected) => {
+      if (request.current === currentRequest) setConnected(isConnected)
+    })
     return () => { request.current += 1; void unsubscribeFromMessages(channel) }
   }, [handleError, selected?.id])
 
   async function loadOlder() {
     const oldest = messages[0]
     if (!selected || !oldest || historyStatus === 'loading') return
+    const conversationId = selected.id
+    const currentRequest = request.current
     setHistoryStatus('loading')
     try {
-      const result = await fetchMessages(selected.id, oldest)
+      const result = await fetchMessages(conversationId, oldest)
+      if (request.current !== currentRequest || selectedId.current !== conversationId) return
       setMessages((current) => mergeMessages(result, current))
       setHasOlder(result.length === messagePageSize)
       setHistoryStatus('idle')
     } catch (cause) {
+      if (request.current !== currentRequest || selectedId.current !== conversationId) return
       setHistoryStatus('error')
       await handleError(cause, 'Não foi possível carregar mensagens anteriores.')
     }
@@ -97,28 +107,38 @@ export function MessagesPage() {
     event.preventDefault()
     if (!selected || !body.trim()) return
     const text = body.trim()
+    const conversationId = selected.id
     const retryId = crypto.randomUUID()
-    const optimistic: Message = { id: retryId, conversationId: selected.id, senderId: user?.id ?? '', clientMessageId: retryId, body: text, createdAt: new Date().toISOString(), delivery: 'sending' }
+    const optimistic: Message = { id: retryId, conversationId, senderId: user?.id ?? '', clientMessageId: retryId, body: text, createdAt: new Date().toISOString(), delivery: 'sending' }
     setBody('')
     setMessages((current) => mergeMessages(current, [optimistic]))
     try {
-      const sent = await sendMessage(selected.id, text, retryId)
-      setMessages((current) => mergeMessages(current.filter((item) => item.clientMessageId !== retryId), [sent]))
+      const sent = await sendMessage(conversationId, text, retryId)
+      if (selectedId.current === conversationId) {
+        setMessages((current) => mergeMessages(current.filter((item) => item.clientMessageId !== retryId), [sent]))
+      }
       void loadConversations()
     } catch (cause) {
-      setMessages((current) => current.map((item) => item.clientMessageId === retryId ? { ...item, delivery: 'error' } : item))
+      if (selectedId.current === conversationId) {
+        setMessages((current) => current.map((item) => item.clientMessageId === retryId ? { ...item, delivery: 'error' } : item))
+      }
       await handleError(cause, 'Não foi possível enviar a mensagem.')
     }
   }
 
   async function retry(message: Message) {
-    if (!selected || message.delivery !== 'error') return
+    if (!selected || message.delivery !== 'error' || message.conversationId !== selected.id) return
+    const conversationId = selected.id
     setMessages((current) => current.map((item) => item.clientMessageId === message.clientMessageId ? { ...item, delivery: 'sending' } : item))
     try {
-      const sent = await sendMessage(selected.id, message.body, message.clientMessageId)
-      setMessages((current) => mergeMessages(current.filter((item) => item.clientMessageId !== message.clientMessageId), [sent]))
+      const sent = await sendMessage(conversationId, message.body, message.clientMessageId)
+      if (selectedId.current === conversationId) {
+        setMessages((current) => mergeMessages(current.filter((item) => item.clientMessageId !== message.clientMessageId), [sent]))
+      }
     } catch (cause) {
-      setMessages((current) => current.map((item) => item.clientMessageId === message.clientMessageId ? { ...item, delivery: 'error' } : item))
+      if (selectedId.current === conversationId) {
+        setMessages((current) => current.map((item) => item.clientMessageId === message.clientMessageId ? { ...item, delivery: 'error' } : item))
+      }
       await handleError(cause, 'A mensagem ainda não pôde ser enviada.')
     }
   }
