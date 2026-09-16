@@ -1,8 +1,10 @@
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '../supabase/client'
 
+export type CallMediaKind = 'audio' | 'video'
+
 export type SignalMessage =
-  | { type: 'invite'; callId: string; from: string; to: string }
+  | { type: 'invite'; callId: string; from: string; to: string; kind: CallMediaKind }
   | { type: 'accept' | 'decline' | 'end'; callId: string; from: string; to: string }
   | { type: 'offer' | 'answer'; callId: string; from: string; to: string; description: RTCSessionDescriptionInit }
   | { type: 'ice'; callId: string; from: string; to: string; candidate: RTCIceCandidateInit }
@@ -55,6 +57,7 @@ function validSignal(value: unknown): value is SignalMessage {
     || typeof signal.to !== 'string' || !UUID_PATTERN.test(signal.to)) return false
   if (signal.type === 'offer' || signal.type === 'answer') return isDescription(signal.description)
   if (signal.type === 'ice') return isCandidate(signal.candidate)
+  if (signal.type === 'invite') return signal.kind === 'audio' || signal.kind === 'video'
   return true
 }
 
@@ -127,7 +130,7 @@ export async function closeCallChannel(entry: CallChannel) {
   if (supabase) await supabase.removeChannel(entry.channel).catch(() => undefined)
 }
 
-export function createAudioPeer(
+export function createMediaPeer(
   onIce: (candidate: RTCIceCandidateInit) => void,
   onRemoteStream: (stream: MediaStream) => void,
   onConnectionState: (state: RTCPeerConnectionState) => void,
@@ -144,9 +147,12 @@ export function createAudioPeer(
   return peer
 }
 
-export async function requestAudioStream() {
-  if (!navigator.mediaDevices?.getUserMedia) throw new Error('Este navegador não oferece acesso ao microfone.')
-  return navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+export async function requestMediaStream(kind: CallMediaKind) {
+  if (!navigator.mediaDevices?.getUserMedia) throw new Error('Este navegador não oferece acesso aos dispositivos de mídia.')
+  return navigator.mediaDevices.getUserMedia({
+    audio: true,
+    video: kind === 'video' ? { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } : false,
+  })
 }
 
 export function stopStream(stream: MediaStream | null) {

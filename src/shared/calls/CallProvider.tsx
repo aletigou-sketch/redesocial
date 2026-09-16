@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useAuth } from '../auth/AuthContext'
-import { CallContext, type ActiveCall, type CallPeer } from './CallContext'
-import { closeCallChannel, createAudioPeer, openCallChannel, requestAudioStream, sendSignal, stopStream, type CallChannel, type SignalMessage } from './callService'
+import { CallContext, type ActiveCall, type CallKind, type CallPeer } from './CallContext'
+import { closeCallChannel, createMediaPeer, openCallChannel, requestMediaStream, sendSignal, stopStream, type CallChannel, type SignalMessage } from './callService'
 import { CallOverlay } from './CallOverlay'
 
 interface Runtime {
@@ -17,11 +17,13 @@ interface Runtime {
   generation: number
 }
 
-function microphoneError(cause: unknown) {
-  if (cause instanceof DOMException && (cause.name === 'NotAllowedError' || cause.name === 'SecurityError')) return 'Permissão de microfone recusada.'
-  if (cause instanceof DOMException && (cause.name === 'NotFoundError' || cause.name === 'DevicesNotFoundError')) return 'Nenhum microfone disponível foi encontrado.'
-  if (cause instanceof DOMException && cause.name === 'NotReadableError') return 'O microfone está indisponível ou sendo usado por outro aplicativo.'
-  return cause instanceof Error ? cause.message : 'Não foi possível acessar o microfone.'
+function mediaError(cause: unknown, kind: CallKind) {
+  const devices = kind === 'video' ? 'câmera e microfone' : 'microfone'
+  if (cause instanceof DOMException && (cause.name === 'NotAllowedError' || cause.name === 'SecurityError')) return `Permissão de ${devices} recusada.`
+  if (cause instanceof DOMException && (cause.name === 'NotFoundError' || cause.name === 'DevicesNotFoundError')) return `Os dispositivos necessários (${devices}) não foram encontrados.`
+  if (cause instanceof DOMException && cause.name === 'NotReadableError') return `A ${kind === 'video' ? 'câmera ou o microfone estão' : 'microfone está'} indisponível ou em uso por outro aplicativo.`
+  if (cause instanceof DOMException && cause.name === 'OverconstrainedError') return 'A câmera disponível não atende à configuração solicitada.'
+  return cause instanceof Error ? cause.message : `Não foi possível acessar ${devices}.`
 }
 
 export function CallProvider({ children }: { children: ReactNode }) {
@@ -54,7 +56,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
     current.pendingIce.length = 0
     if (audio.current) audio.current.srcObject = null
     runtime.current = null
-  }, [])
+    updateCall((value) => value && (!expectedCallId || value.callId === expectedCallId) ? { ...value, localStream: null, remoteStream: null, cameraEnabled: false, microphoneEnabled: false } : value)
+  }, [updateCall])
 
   const failCall = useCallback((callId: string, message: string) => {
     if (runtime.current?.callId !== callId && callRef.current?.callId !== callId) return
@@ -81,13 +84,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
     if (!current || current.callId !== currentCall.callId) return null
     if (current.peer) return current.peer
     const expectedGeneration = current.generation
-    const stream = await requestAudioStream()
+    const stream = await requestMediaStream(currentCall.kind)
     if (runtime.current !== current || generation.current !== expectedGeneration) {
       stopStream(stream)
       return null
     }
     current.localStream = stream
-    const peer = createAudioPeer(
+    updateCall((value) => value?.callId === currentCall.callId ? { ...value, localStream: stream, microphoneEnabled: stream.getAudioTracks().some((track) => track.enabled), cameraEnabled: stream.getVideoTracks().some((track) => track.enabled) } : value)
+    const peer = createMediaPeer(
       (candidate) => {
         if (runtime.current !== current) return
         void signal(currentCall.conversationId, { type: 'ice', callId: currentCall.callId, from: userId.current ?? '', to: currentCall.userId, candidate })
@@ -99,6 +103,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
           return
         }
         current.remoteStream = remoteStream
+        updateCall((value) => value?.callId === currentCall.callId ? { ...value, remoteStream } : value)
         if (audio.current) {
           audio.current.srcObject = remoteStream
           void audio.current.play().catch(() => failCall(currentCall.callId, 'Não foi possível reproduzir o áudio recebido.'))
@@ -129,7 +134,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       }
       const nextGeneration = ++generation.current
       runtime.current = { callId: incoming.callId, conversationId, peer: null, localStream: null, remoteStream: null, pendingIce: [], accepted: false, offerHandled: false, answerHandled: false, generation: nextGeneration }
-      updateCall({ ...registeredPeer, callId: incoming.callId, direction: 'incoming', status: 'receiving', error: null })
+      updateCall({ ...registeredPeer, callId: incoming.callId, kind: incoming.kind, direction: 'incoming', status: 'receiving', error: null, microphoneEnabled: false, cameraEnabled: false, localStream: null, remoteStream: null })
       return
     }
 
@@ -214,18 +219,18 @@ export function CallProvider({ children }: { children: ReactNode }) {
     }
   }, [failCall, handleSignal, updateCall])
 
-  const startCall = useCallback(async (peer: CallPeer) => {
+  const startCall = useCallback(async (peer: CallPeer, kind: CallKind = 'audio') => {
     const ownId = userId.current
     if (!ownId || runtime.current || callRef.current) return
     registerPeers([peer])
     const conversationId = peer.conversationId.toLowerCase()
     const callId = crypto.randomUUID()
-    const next: ActiveCall = { ...peer, conversationId, userId: peer.userId.toLowerCase(), callId, direction: 'outgoing', status: 'initiating', error: null }
+    const next: ActiveCall = { ...peer, conversationId, userId: peer.userId.toLowerCase(), callId, kind, direction: 'outgoing', status: 'initiating', error: null, microphoneEnabled: false, cameraEnabled: false, localStream: null, remoteStream: null }
     const nextGeneration = ++generation.current
     runtime.current = { callId, conversationId, peer: null, localStream: null, remoteStream: null, pendingIce: [], accepted: false, offerHandled: false, answerHandled: false, generation: nextGeneration }
     updateCall(next)
     try {
-      await signal(conversationId, { type: 'invite', callId, from: ownId, to: next.userId })
+      await signal(conversationId, { type: 'invite', callId, from: ownId, to: next.userId, kind })
       if (runtime.current?.callId === callId) updateCall({ ...next, status: 'ringing' })
     } catch (cause) {
       failCall(callId, cause instanceof Error ? cause.message : 'Não foi possível iniciar a chamada.')
@@ -244,7 +249,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       if (!peer || runtime.current !== current) return
       await signal(snapshot.conversationId, { type: 'accept', callId: snapshot.callId, from: ownId, to: snapshot.userId })
     } catch (cause) {
-      failCall(snapshot.callId, microphoneError(cause))
+      failCall(snapshot.callId, mediaError(cause, snapshot.kind))
     }
   }, [attachPeer, failCall, signal, updateCall])
 
@@ -257,6 +262,34 @@ export function CallProvider({ children }: { children: ReactNode }) {
     cleanupMedia(snapshot.callId)
     updateCall({ ...snapshot, status: kind === 'decline' ? 'declined' : 'ended', error: null })
   }, [cleanupMedia, signal, updateCall])
+
+  const toggleMicrophone = useCallback(() => {
+    const snapshot = callRef.current
+    const stream = runtime.current?.localStream
+    if (!snapshot || !stream) return
+    const tracks = stream.getAudioTracks().filter((track) => track.readyState === 'live')
+    if (!tracks.length) {
+      updateCall({ ...snapshot, error: 'O microfone ficou indisponível.' })
+      return
+    }
+    const enabled = !tracks.some((track) => track.enabled)
+    tracks.forEach((track) => { track.enabled = enabled })
+    updateCall({ ...snapshot, microphoneEnabled: enabled, error: null })
+  }, [updateCall])
+
+  const toggleCamera = useCallback(() => {
+    const snapshot = callRef.current
+    const stream = runtime.current?.localStream
+    if (!snapshot || snapshot.kind !== 'video' || !stream) return
+    const tracks = stream.getVideoTracks().filter((track) => track.readyState === 'live')
+    if (!tracks.length) {
+      updateCall({ ...snapshot, cameraEnabled: false, error: 'A câmera ficou indisponível.' })
+      return
+    }
+    const enabled = !tracks.some((track) => track.enabled)
+    tracks.forEach((track) => { track.enabled = enabled })
+    updateCall({ ...snapshot, cameraEnabled: enabled, error: null })
+  }, [updateCall])
 
   const dismissCall = useCallback(() => {
     cleanupMedia()
@@ -297,7 +330,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     peers.current.clear()
   }, [cleanupMedia])
 
-  const value = useMemo(() => ({ call, registerPeers, startCall, acceptCall, declineCall: () => finish('decline'), endCall: () => finish('end'), dismissCall }), [acceptCall, call, dismissCall, finish, registerPeers, startCall])
+  const value = useMemo(() => ({ call, registerPeers, startCall, acceptCall, declineCall: () => finish('decline'), endCall: () => finish('end'), toggleMicrophone, toggleCamera, dismissCall }), [acceptCall, call, dismissCall, finish, registerPeers, startCall, toggleCamera, toggleMicrophone])
 
   return <CallContext.Provider value={value}>{children}<audio ref={audio} autoPlay aria-hidden="true" /><CallOverlay /></CallContext.Provider>
 }
