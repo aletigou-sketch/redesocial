@@ -3,6 +3,7 @@ import { LoaderCircle } from 'lucide-react'
 import { AppShell } from './AppShell'
 import { AuthPage, type AuthView } from '../features/auth/AuthPage'
 import { HomePage } from '../features/home/HomePage'
+import { AdminPage } from '../features/admin/AdminPage'
 import { useAuth } from '../shared/auth/AuthContext'
 import { PublicOnly, RequireAuth } from '../shared/auth/AuthGuards'
 import type { NavigationItem } from '../shared/types/navigation'
@@ -31,7 +32,7 @@ export function App() {
     if (isLoading) return
     const publicPath = ['/login', '/cadastro', '/recuperar-senha'].includes(window.location.pathname)
     if (user && publicPath) navigate('/app', true)
-    if (!user && window.location.pathname === '/app') navigate('/login?motivo=sessao', true)
+    if (!user && ['/app', '/admin'].includes(window.location.pathname)) navigate('/login?motivo=sessao', true)
     if (window.location.pathname === '/') navigate(user ? '/app' : '/login', true)
   }, [isLoading, user])
 
@@ -39,6 +40,14 @@ export function App() {
 
   const path = location.split('?')[0]
   const authView: AuthView = path === '/cadastro' ? 'signup' : path === '/recuperar-senha' ? 'forgot' : 'login'
+
+  if (path === '/admin') {
+    return (
+      <RequireAuth loadingFallback={<LoadingScreen />} unauthenticatedFallback={<LoadingScreen />} configurationFallback={<AuthPage view="login" onNavigate={navigate} />}>
+        <AdminPage onExit={() => navigate('/app')} />
+      </RequireAuth>
+    )
+  }
 
   if (path !== '/app') {
     return (
