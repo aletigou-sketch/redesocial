@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { LoaderCircle, MessageCircle, Plus, RefreshCw, Send } from 'lucide-react'
+import { LoaderCircle, MessageCircle, Phone, Plus, RefreshCw, Send } from 'lucide-react'
 import { useAuth } from '../../shared/auth/AuthContext'
+import { useCalls } from '../../shared/calls/CallContext'
 import { usePresenceScope } from '../../shared/presence/PresenceContext'
 import { createConversation, fetchConversations, fetchMessages, messagePageSize, MessageServiceError, sendMessage, subscribeToMessages, unsubscribeFromMessages, type Conversation, type Message } from './messageService'
 import './messages.css'
@@ -17,6 +18,7 @@ function mergeMessages(current: Message[], incoming: Message[]) {
 
 export function MessagesPage() {
   const { user, signOut } = useAuth()
+  const { call, registerPeers, startCall } = useCalls()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selected, setSelected] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -57,6 +59,10 @@ export function MessagesPage() {
   }, [handleError, user?.id])
 
   useEffect(() => { void loadConversations() }, [loadConversations])
+
+  useEffect(() => {
+    registerPeers(conversations.map((conversation) => ({ conversationId: conversation.id, userId: conversation.otherUserId, displayName: conversation.displayName, username: conversation.username })))
+  }, [conversations, registerPeers])
 
   useEffect(() => {
     const conversationId = selected?.id
@@ -176,7 +182,7 @@ export function MessagesPage() {
       </aside>
       <div className="messages-thread">
         {!selected ? <div className="messages-empty"><MessageCircle size={42} /><h2>Escolha uma conversa</h2><p>Seu histórico privado aparecerá aqui.</p></div> : <>
-          <header className="thread-header"><div><strong>{selected.displayName}</strong><small>@{selected.username}</small></div><div className="thread-status"><span className={`presence-label is-${otherPresence}`}><i aria-hidden="true" />{otherPresence === 'online' ? 'Online' : otherPresence === 'away' ? 'Ausente' : 'Offline'}</span><span className={connected ? 'is-online' : ''}>{connected ? 'Mensagens conectadas' : 'Reconectando mensagens…'}</span>{!presence.connected && <small>Presença reconectando…</small>}</div></header>
+          <header className="thread-header"><div><strong>{selected.displayName}</strong><small>@{selected.username}</small></div><div className="thread-header-actions"><div className="thread-status"><span className={`presence-label is-${otherPresence}`}><i aria-hidden="true" />{otherPresence === 'online' ? 'Online' : otherPresence === 'away' ? 'Ausente' : 'Offline'}</span><span className={connected ? 'is-online' : ''}>{connected ? 'Mensagens conectadas' : 'Reconectando mensagens…'}</span>{!presence.connected && <small>Presença reconectando…</small>}</div><button className="icon-button call-start" disabled={Boolean(call)} onClick={() => void startCall({ conversationId: selected.id, userId: selected.otherUserId, displayName: selected.displayName, username: selected.username })} aria-label={`Ligar para ${selected.displayName}`} title="Iniciar chamada de áudio"><Phone size={19} /></button></div></header>
           <div className="thread-history" aria-live="polite">
             {hasOlder && <button className="history-button" onClick={() => void loadOlder()} disabled={historyStatus === 'loading'}>{historyStatus === 'loading' ? 'Carregando…' : 'Carregar anteriores'}</button>}
             {historyStatus === 'loading' && messages.length === 0 && <div className="messages-empty"><LoaderCircle className="spin" /> Carregando histórico…</div>}

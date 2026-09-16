@@ -4,6 +4,7 @@ import { App } from './app/App'
 import { AuthProvider } from './shared/auth/AuthProvider'
 import { ProfileProvider } from './shared/profile/ProfileProvider'
 import { PresenceProvider } from './shared/presence/PresenceProvider'
+import { CallProvider } from './shared/calls/CallProvider'
 import './styles/index.css'
 
 const root = document.getElementById('root')
@@ -15,7 +16,9 @@ createRoot(root).render(
     <AuthProvider>
       <ProfileProvider>
         <PresenceProvider>
-          <App />
+          <CallProvider>
+            <App />
+          </CallProvider>
         </PresenceProvider>
       </ProfileProvider>
     </AuthProvider>
