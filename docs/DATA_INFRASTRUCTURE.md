@@ -11,14 +11,15 @@ A migration `supabase/migrations/20260916000100_create_identity_foundation.sql` 
 - `public.user_blocks`: bloqueio direcionado entre dois perfis, com chave composta que impede duplicidade e constraint que impede autobloqueio.
 - `storage.buckets` / `storage.objects`: bucket privado `profile-avatars`; cada objeto deve ficar sob a pasta cujo nome é o UUID do proprietário.
 
-As foreign keys usam `on delete cascade`, de modo que a remoção da identidade pelo fluxo administrativo do Supabase elimina os dados dependentes. A aplicação deverá criar o perfil e suas configurações após o cadastro; não há trigger automática em `auth.users` para evitar efeitos implícitos no schema gerenciado pelo Supabase.
+As foreign keys usam `on delete cascade`, de modo que a remoção da identidade pelo fluxo administrativo do Supabase elimina os dados dependentes. Um trigger `after insert` em `auth.users` cria o perfil e as configurações de privacidade na mesma transação do cadastro. Se qualquer inserção falhar, o provisionamento e a criação da identidade são revertidos juntos; as chaves primárias impedem duplicação.
 
 ## Acesso e RLS
 
 RLS é habilitado e forçado nas três tabelas públicas.
 
 - `anon` não recebe nenhuma policy de tabela ou Storage.
-- Usuários autenticados podem criar, ler, alterar e excluir somente o próprio perfil.
+- Perfis e configurações de privacidade são criados exclusivamente pelo trigger de provisionamento; não há policy de inserção direta para usuários autenticados.
+- Usuários autenticados podem ler, alterar e excluir somente o próprio perfil.
 - Outros perfis são legíveis somente quando `is_discoverable = true` e não existe bloqueio em nenhuma direção.
 - Configurações de privacidade são acessíveis somente pelo proprietário.
 - Cada usuário pode consultar e administrar apenas os bloqueios que criou. A pessoa bloqueada não recebe acesso à lista.
@@ -30,7 +31,9 @@ Não há `USING (true)` para dados privados. O perfil não contém e-mail, telef
 
 `public.is_blocked_between` usa `SECURITY DEFINER` somente porque a policy de descoberta precisa detectar bloqueios nas duas direções sem revelar quem bloqueou o usuário. A identidade do solicitante é obtida internamente por `auth.uid()`: o chamador informa apenas o outro perfil, evitando consultas arbitrárias sobre relações de bloqueio entre terceiros. A função tem `search_path` vazio, referencia objetos qualificados e sua execução é revogada de `public` e `anon`.
 
-As demais funções usam o comportamento invocador padrão. Triggers existem apenas para manter `updated_at`. O caminho do avatar é validado para começar com o UUID do proprietário, e as policies de Storage repetem essa condição.
+`public.provision_user_profile` usa `SECURITY DEFINER` porque o trigger em `auth.users` precisa inserir em tabelas com RLS forçada sem depender de uma sessão do cliente. A função fixa `search_path` vazio, qualifica todos os objetos, deriva `user_id` somente de `new.id`, ignora metadados controláveis pelo cliente e tem execução revogada de `public`, `anon` e `authenticated`. O username inicial é determinístico, válido e derivado do UUID; a restrição única faz uma colisão excepcional falhar de forma atômica em vez de vincular um perfil incorreto.
+
+As demais funções usam o comportamento invocador padrão. Os outros triggers mantêm `updated_at`. O caminho do avatar é validado para começar com o UUID do proprietário, e as policies de Storage repetem essa condição.
 
 A migration cria índices apenas para consultas previstas: username único, listagem de perfis descobríveis e busca de bloqueios pelo usuário bloqueado. Nenhum dado fictício é inserido; a linha do bucket representa configuração versionada do Storage.
 
@@ -54,4 +57,4 @@ A migration cria índices apenas para consultas previstas: username único, list
 
 A migration não foi aplicada. Não foram executados SQL, Supabase CLI, build, lint ou typecheck. A revisão realizada é somente estática; portanto ainda não estão validados a versão PostgreSQL do destino, disponibilidade exata das funções de Storage, conflitos com policies ou bucket existentes, permissões do executor, desempenho real, comportamento das sessões Auth e integração com o frontend.
 
-Antes do uso em produção também devem ser definidos os fluxos de criação de perfil, tratamento de conflito de username, exclusão de conta, entrega de avatares privados e testes automatizados de isolamento entre usuários.
+Antes do uso em produção ainda devem ser validados o tratamento de conflito ao trocar o username inicial, o fluxo administrativo de exclusão da conta, a entrega de avatares privados e testes automatizados de provisionamento, rollback e isolamento entre usuários. O trigger, a função, as policies e os cascades permanecem apenas versionados até a aplicação real da migration.

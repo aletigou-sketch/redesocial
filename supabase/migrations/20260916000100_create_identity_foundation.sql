@@ -83,6 +83,38 @@ create trigger privacy_settings_set_updated_at
 before update on public.privacy_settings
 for each row execute function public.set_updated_at();
 
+-- O cadastro em auth.users provisiona perfil e privacidade na mesma transação.
+-- A identidade e o username inicial derivam exclusivamente do UUID criado pelo
+-- Auth; metadados enviados pelo cliente não controlam user_id nem privilégios.
+create function public.provision_user_profile()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  insert into public.profiles (user_id, username, display_name)
+  values (
+    new.id,
+    'u_' || left(replace(new.id::text, '-', ''), 28),
+    'Novo usuário'
+  );
+
+  insert into public.privacy_settings (user_id)
+  values (new.id);
+
+  return new;
+end;
+$$;
+
+revoke all on function public.provision_user_profile() from public;
+revoke all on function public.provision_user_profile() from anon;
+revoke all on function public.provision_user_profile() from authenticated;
+
+create trigger auth_user_provision_profile
+after insert on auth.users
+for each row execute function public.provision_user_profile();
+
 -- A função é necessária para policies que devem considerar bloqueios nas duas
 -- direções sem revelar ao usuário quem o bloqueou. O search_path é fixado e a
 -- execução é concedida apenas ao papel authenticated.
@@ -131,12 +163,6 @@ using (
   and not public.is_blocked_between(user_id)
 );
 
-create policy profiles_insert_own
-on public.profiles
-for insert
-to authenticated
-with check ((select auth.uid()) = user_id);
-
 create policy profiles_update_own
 on public.profiles
 for update
@@ -155,12 +181,6 @@ on public.privacy_settings
 for select
 to authenticated
 using ((select auth.uid()) = user_id);
-
-create policy privacy_settings_insert_own
-on public.privacy_settings
-for insert
-to authenticated
-with check ((select auth.uid()) = user_id);
 
 create policy privacy_settings_update_own
 on public.privacy_settings

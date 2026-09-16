@@ -19,7 +19,9 @@ Nenhuma chave `service_role` ou outro segredo pode ser usado no frontend. Na aus
 
 A interface definitiva de cadastro, login e recuperação não foi criada porque suas decisões de UX ainda não existem. Os dados demonstrativos atuais também não foram convertidos em dados autenticados. A integração depende de o Supabase Auth estar habilitado e configurado no mesmo projeto, das URLs de redirecionamento autorizadas e das variáveis públicas acima.
 
-Esta preparação não aplica migrations, não cria tabelas e não comprova que autenticação, entrega de e-mail ou redirecionamentos funcionam no backend. Após a configuração operacional, os formulários e as rotas poderão consumir a camada existente sem criar autenticação própria.
+A migration versionada prepara o provisionamento automático do perfil e das configurações de privacidade a partir de `auth.users`, sem permitir que o frontend escolha o identificador. O cadastro somente poderá ser considerado completo quando essa migration estiver aplicada: falhas no trigger revertem a criação da identidade, enquanto login posterior e recuperação de sessão reutilizam o perfil vinculado pelo mesmo UUID.
+
+Esta preparação não aplica migrations e não comprova que autenticação, trigger, RLS, entrega de e-mail ou redirecionamentos funcionam no backend. Após a configuração operacional, os formulários e as rotas poderão consumir a camada existente sem criar autenticação própria.
 
 ## Revisão estática
 
