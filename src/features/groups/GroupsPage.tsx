@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEv
 import { ArrowLeft, Camera, ImageIcon, LoaderCircle, LogIn, LogOut, Plus, RefreshCw, Shield, Users, X } from 'lucide-react'
 import { useAuth } from '../../shared/auth/AuthContext'
 import { createGroup, fetchGroup, fetchGroups, GroupServiceError, joinGroup, leaveGroup, updateGroup, type Group } from './groupService'
+import { ModerationActions } from '../moderation/ModerationActions'
 import './groups.css'
 
 interface FormState { name: string; description: string; image: File | null }
@@ -131,6 +132,7 @@ export function GroupsPage() {
             <div className="group-detail-actions">
               {selected.role === 'admin' && <button className="primary-button" onClick={openEdit}>Administrar grupo</button>}
               {selected.createdBy !== user?.id && <button className="secondary-button danger-button" onClick={() => void handleLeave()} disabled={saving}><LogOut size={17} /> {saving ? 'Saindo…' : 'Sair do grupo'}</button>}
+              {selected.createdBy !== user?.id && <ModerationActions targetType="group" targetId={selected.id} />}
             </div>
           </div>
         </article>

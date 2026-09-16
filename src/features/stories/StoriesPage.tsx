@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'reac
 import { ArrowLeft, ArrowRight, ImagePlus, LoaderCircle, RefreshCw, X } from 'lucide-react'
 import { useAuth } from '../../shared/auth/AuthContext'
 import { fetchStories, publishStory, registerStoryView, StoryServiceError, type Story } from './storyService'
+import { ModerationActions } from '../moderation/ModerationActions'
 
 const VIEW_DURATION_MS = 6000
 
@@ -164,6 +165,7 @@ export function StoriesPage() {
             <div className="story-progress" role="progressbar" aria-label="Progresso do Story" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}><span style={{ width: `${progress}%` }} /></div>
             <header><span className="avatar avatar-small">{activeStory.avatarUrl ? <img className="avatar-image" src={activeStory.avatarUrl} alt="" /> : activeStory.displayName.slice(0, 2).toUpperCase()}</span><strong>{activeStory.isOwn ? 'Seu Story' : activeStory.displayName}</strong><button ref={closeButtonRef} onClick={closeViewer} aria-label="Fechar visualizador"><X /></button></header>
             <div className="story-media">{activeStory.mediaUrl ? <img src={activeStory.mediaUrl} alt={`Story de ${activeStory.displayName}`} onError={() => markMediaUnavailable(activeStory.id)} /> : <div className="story-media-error"><ImagePlus /><strong>Mídia indisponível</strong><span>Este arquivo não pôde ser carregado.</span></div>}</div>
+            {!activeStory.isOwn && <div className="story-moderation"><ModerationActions targetType="story" targetId={activeStory.id} userId={activeStory.ownerId} compact onBlocked={() => { closeViewer(); void load() }} /></div>}
             <button className="story-nav story-nav-left" onClick={previous} disabled={activeIndex === 0} aria-label="Story anterior"><ArrowLeft /></button>
             <button className="story-nav story-nav-right" onClick={next} aria-label={activeIndex === stories.length - 1 ? 'Fechar no último Story' : 'Próximo Story'}><ArrowRight /></button>
           </div>
