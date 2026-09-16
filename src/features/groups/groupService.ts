@@ -4,6 +4,7 @@ const GROUP_BUCKET = 'group-images'
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const SIGNED_URL_TTL = 600
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export type GroupRole = 'admin' | 'member'
 
@@ -15,7 +16,7 @@ interface GroupRow {
   created_by: string
   created_at: string
   updated_at: string
-  group_members: Array<{ role: GroupRole; joined_at: string }> | { role: GroupRole; joined_at: string } | null
+  group_members: Array<{ role: GroupRole; joined_at: string; user_id: string }> | { role: GroupRole; joined_at: string; user_id: string } | null
 }
 
 export interface Group {
@@ -63,6 +64,7 @@ function mapError(error: { code?: string }): GroupServiceError {
   if (error.code === '23505') return new GroupServiceError('conflict', 'Esta associação já existe.')
   if (error.code === 'PGRST116') return new GroupServiceError('not_found', 'O grupo não foi encontrado ou você não possui acesso.')
   if (error.code === '42501') return new GroupServiceError('forbidden', 'Você não possui permissão para concluir esta operação.')
+  if (error.code === '22023' || error.code === '22P02') return new GroupServiceError('invalid_input', 'Os dados informados são inválidos.')
   return new GroupServiceError('request_failed', 'Não foi possível concluir a operação agora. Tente novamente.')
 }
 
@@ -72,6 +74,12 @@ function normalizeInput(input: GroupInput): GroupInput {
   if (name.length < 3 || name.length > 80) throw new GroupServiceError('invalid_input', 'O nome deve ter entre 3 e 80 caracteres.')
   if (description.length > 500) throw new GroupServiceError('invalid_input', 'A descrição deve ter no máximo 500 caracteres.')
   return { name, description }
+}
+
+function normalizeGroupId(groupId: string): string {
+  const normalized = groupId.trim().toLowerCase()
+  if (!UUID_PATTERN.test(normalized)) throw new GroupServiceError('invalid_input', 'Informe um código de grupo válido.')
+  return normalized
 }
 
 function hasExpectedSignature(type: string, bytes: Uint8Array): boolean {
@@ -98,20 +106,13 @@ async function signedImage(path: string | null): Promise<string | null> {
   return error ? null : data.signedUrl
 }
 
-async function memberCount(groupId: string): Promise<number> {
-  const { count, error } = await requireClient().from('group_members').select('group_id', { count: 'exact', head: true }).eq('group_id', groupId)
-  if (error) throw mapError(error)
-  return count ?? 0
-}
-
-function membership(value: GroupRow['group_members']): { role: GroupRole; joined_at: string } | null {
+function membership(value: GroupRow['group_members']): { role: GroupRole; joined_at: string; user_id: string } | null {
   return Array.isArray(value) ? value[0] ?? null : value
 }
 
-async function mapGroup(row: GroupRow): Promise<Group> {
+function mapGroup(row: GroupRow, memberCount: number, imageUrl: string | null): Group {
   const member = membership(row.group_members)
   if (!member) throw new GroupServiceError('forbidden', 'Você não possui acesso a este grupo.')
-  const [imageUrl, count] = await Promise.all([signedImage(row.image_path), memberCount(row.id)])
   return {
     id: row.id,
     name: row.name,
@@ -123,27 +124,62 @@ async function mapGroup(row: GroupRow): Promise<Group> {
     updatedAt: row.updated_at,
     role: member.role,
     joinedAt: member.joined_at,
-    memberCount: count,
+    memberCount,
   }
 }
 
-const GROUP_COLUMNS = 'id,name,description,image_path,created_by,created_at,updated_at,group_members!inner(role,joined_at)'
+const GROUP_COLUMNS = 'id,name,description,image_path,created_by,created_at,updated_at,group_members!inner(role,joined_at,user_id)'
 
 export async function fetchGroups(): Promise<Group[]> {
   const client = requireClient()
-  await currentUserId()
-  const { data, error } = await client.from('groups').select(GROUP_COLUMNS).order('updated_at', { ascending: false })
+  const userId = await currentUserId()
+  const { data, error } = await client
+    .from('groups')
+    .select(GROUP_COLUMNS)
+    .eq('group_members.user_id', userId)
+    .order('updated_at', { ascending: false })
   if (error) throw mapError(error)
-  return Promise.all(((data ?? []) as unknown as GroupRow[]).map(mapGroup))
+
+  const rows = (data ?? []) as unknown as GroupRow[]
+  if (!rows.length) return []
+
+  const groupIds = rows.map((row) => row.id)
+  const { data: members, error: membersError } = await client
+    .from('group_members')
+    .select('group_id')
+    .in('group_id', groupIds)
+  if (membersError) throw mapError(membersError)
+
+  const counts = new Map<string, number>()
+  for (const member of members ?? []) {
+    const groupId = member.group_id as string
+    counts.set(groupId, (counts.get(groupId) ?? 0) + 1)
+  }
+
+  return Promise.all(rows.map(async (row) => mapGroup(row, counts.get(row.id) ?? 0, await signedImage(row.image_path))))
 }
 
 export async function fetchGroup(groupId: string): Promise<Group> {
   const client = requireClient()
-  await currentUserId()
-  const { data, error } = await client.from('groups').select(GROUP_COLUMNS).eq('id', groupId).maybeSingle()
+  const userId = await currentUserId()
+  const normalizedId = normalizeGroupId(groupId)
+  const { data, error } = await client
+    .from('groups')
+    .select(GROUP_COLUMNS)
+    .eq('id', normalizedId)
+    .eq('group_members.user_id', userId)
+    .maybeSingle()
   if (error) throw mapError(error)
   if (!data) throw new GroupServiceError('not_found', 'O grupo não foi encontrado ou você não possui acesso.')
-  return mapGroup(data as unknown as GroupRow)
+
+  const { count, error: countError } = await client
+    .from('group_members')
+    .select('group_id', { count: 'exact', head: true })
+    .eq('group_id', normalizedId)
+  if (countError) throw mapError(countError)
+
+  const row = data as unknown as GroupRow
+  return mapGroup(row, count ?? 0, await signedImage(row.image_path))
 }
 
 async function uploadImage(groupId: string, file: File): Promise<string> {
@@ -169,8 +205,14 @@ export async function createGroup(input: GroupInput, image?: File | null): Promi
       const { error: updateError } = await client.from('groups').update({ image_path: path }).eq('id', groupId)
       if (updateError) throw mapError(updateError)
     } catch (cause) {
-      if (path) await client.storage.from(GROUP_BUCKET).remove([path])
-      await client.rpc('delete_owned_group', { target_group_id: groupId })
+      let cleanupFailed = false
+      if (path) {
+        const { error: storageCleanupError } = await client.storage.from(GROUP_BUCKET).remove([path])
+        cleanupFailed = Boolean(storageCleanupError)
+      }
+      const { error: groupCleanupError } = await client.rpc('delete_owned_group', { target_group_id: groupId })
+      cleanupFailed = cleanupFailed || Boolean(groupCleanupError)
+      if (cleanupFailed) throw new GroupServiceError('request_failed', 'A criação falhou e alguns dados podem exigir limpeza operacional.')
       throw cause
     }
   }
@@ -184,25 +226,29 @@ export async function updateGroup(group: Group, input: GroupInput, image?: File 
   let uploadedPath: string | null = null
   if (image) uploadedPath = await uploadImage(group.id, image)
   const changes = uploadedPath ? { ...normalized, image_path: uploadedPath } : normalized
-  const { error } = await client.from('groups').update(changes).eq('id', group.id)
-  if (error) {
+  const { data, error } = await client.from('groups').update(changes).eq('id', group.id).select('id').maybeSingle()
+  if (error || !data) {
     if (uploadedPath) await client.storage.from(GROUP_BUCKET).remove([uploadedPath])
+    if (!error) throw new GroupServiceError('not_found', 'O grupo não foi encontrado ou você não possui acesso.')
     throw mapError(error)
   }
-  if (uploadedPath && group.imagePath) await client.storage.from(GROUP_BUCKET).remove([group.imagePath])
+  if (uploadedPath && group.imagePath) {
+    const { error: cleanupError } = await client.storage.from(GROUP_BUCKET).remove([group.imagePath])
+    if (cleanupError) throw new GroupServiceError('request_failed', 'O grupo foi atualizado, mas a imagem anterior pode exigir limpeza operacional.')
+  }
   return fetchGroup(group.id)
 }
 
 export async function joinGroup(groupId: string): Promise<void> {
   const client = requireClient()
   await currentUserId()
-  const { error } = await client.rpc('join_group', { target_group_id: groupId })
+  const { error } = await client.rpc('join_group', { target_group_id: normalizeGroupId(groupId) })
   if (error) throw mapError(error)
 }
 
 export async function leaveGroup(groupId: string): Promise<void> {
   const client = requireClient()
   await currentUserId()
-  const { error } = await client.rpc('leave_group', { target_group_id: groupId })
+  const { error } = await client.rpc('leave_group', { target_group_id: normalizeGroupId(groupId) })
   if (error) throw mapError(error)
 }
