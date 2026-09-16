@@ -1,0 +1,10 @@
+# Configuração local do Supabase CLI.
+# O vínculo com o projeto remoto deve ser feito explicitamente no ambiente autorizado.
+project_id = "hi-you"
+
+[db]
+schema_paths = ["./schemas/*.sql"]
+
+[db.migrations]
+enabled = true
+schema_paths = []
