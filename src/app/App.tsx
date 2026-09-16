@@ -4,6 +4,7 @@ import { AppShell } from './AppShell'
 import { AuthPage, type AuthView } from '../features/auth/AuthPage'
 import { useAuth } from '../shared/auth/AuthContext'
 
+const LandingPage = lazy(() => import('../features/landing/LandingPage').then((module) => ({ default: module.LandingPage })))
 const HomePage = lazy(() => import('../features/home/HomePage').then((module) => ({ default: module.HomePage })))
 const AdminPage = lazy(() => import('../features/admin/AdminPage').then((module) => ({ default: module.AdminPage })))
 import { PublicOnly, RequireAuth } from '../shared/auth/AuthGuards'
@@ -34,13 +35,16 @@ export function App() {
     const publicPath = ['/login', '/cadastro', '/recuperar-senha'].includes(window.location.pathname)
     if (user && publicPath) navigate('/app', true)
     if (!user && ['/app', '/admin'].includes(window.location.pathname)) navigate('/login?motivo=sessao', true)
-    if (window.location.pathname === '/') navigate(user ? '/app' : '/login', true)
   }, [isLoading, user])
 
   if (isLoading) return <LoadingScreen />
 
   const path = location.split('?')[0]
   const authView: AuthView = path === '/cadastro' ? 'signup' : path === '/recuperar-senha' ? 'forgot' : 'login'
+
+  if (path === '/') {
+    return <Suspense fallback={<LoadingScreen />}><LandingPage onNavigate={navigate} /></Suspense>
+  }
 
   if (path === '/admin') {
     return (
