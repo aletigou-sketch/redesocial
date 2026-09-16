@@ -36,8 +36,9 @@ export function ProfilePage() {
 
   function chooseAvatar(file?: File) {
     if (!file) return
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
-      setErrors((current) => ({ ...current, avatar: 'Escolha uma imagem JPG, PNG ou WebP de até 5 MB.' }))
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size <= 0 || file.size > 5 * 1024 * 1024) {
+      setErrors((current) => ({ ...current, avatar: 'Escolha uma imagem JPG, PNG ou WebP com conteúdo e de até 5 MB.' }))
+      if (fileRef.current) fileRef.current.value = ''
       return
     }
     if (preview) URL.revokeObjectURL(preview)
@@ -83,7 +84,7 @@ export function ProfilePage() {
 
         <div className="avatar-editor">
           <span className="profile-avatar profile-avatar-edit">{shownAvatar ? <img src={shownAvatar} alt="Prévia do avatar" /> : initials}</span>
-          <div><strong>Foto do perfil</strong><p>JPG, PNG ou WebP, com até 5 MB. O arquivo permanece em área privada.</p><div className="avatar-actions"><button type="button" className="secondary-button" onClick={() => fileRef.current?.click()} disabled={isSaving}><Camera size={16} /> Escolher imagem</button>{(shownAvatar || profile.avatar_path) && <button type="button" className="profile-remove" onClick={() => { setAvatar(null); setPreview(null); setRemoveAvatar(true); setSuccess('') }} disabled={isSaving}><Trash2 size={16} /> Remover</button>}</div><input ref={fileRef} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseAvatar(event.target.files?.[0])} />{errors.avatar && <small className="field-error">{errors.avatar}</small>}</div>
+          <div><strong>Foto do perfil</strong><p>JPG, PNG ou WebP, com até 5 MB. O arquivo permanece em área privada.</p><div className="avatar-actions"><button type="button" className="secondary-button" onClick={() => fileRef.current?.click()} disabled={isSaving}><Camera size={16} /> Escolher imagem</button>{(shownAvatar || profile.avatar_path) && <button type="button" className="profile-remove" onClick={() => { if (preview) URL.revokeObjectURL(preview); setAvatar(null); setPreview(null); setRemoveAvatar(true); setSuccess(''); if (fileRef.current) fileRef.current.value = '' }} disabled={isSaving}><Trash2 size={16} /> Remover</button>}</div><input ref={fileRef} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => chooseAvatar(event.target.files?.[0])} />{errors.avatar && <small className="field-error">{errors.avatar}</small>}</div>
         </div>
 
         <div className="profile-fields">

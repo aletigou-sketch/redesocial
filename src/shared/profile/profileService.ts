@@ -3,6 +3,7 @@ import { supabase } from '../supabase/client'
 const AVATAR_BUCKET = 'profile-avatars'
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024
 const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const PROFILE_COLUMNS = 'user_id, username, display_name, bio, avatar_path, is_discoverable, created_at, updated_at'
 
 export interface Profile {
   user_id: string
@@ -24,7 +25,7 @@ export interface ProfileInput {
 
 export class ProfileServiceError extends Error {
   constructor(
-    public readonly code: 'unavailable' | 'session_expired' | 'not_found' | 'conflict' | 'invalid_avatar' | 'request_failed',
+    public readonly code: 'unavailable' | 'session_expired' | 'not_found' | 'conflict' | 'invalid_profile' | 'invalid_avatar' | 'request_failed',
     message: string,
   ) {
     super(message)
@@ -55,24 +56,64 @@ function mapRequestError(error: { code?: string; message?: string }): ProfileSer
   return new ProfileServiceError('request_failed', 'Não foi possível concluir a operação agora. Tente novamente.')
 }
 
+function normalizeProfileInput(input: ProfileInput): ProfileInput {
+  const username = input.username.trim().toLowerCase()
+  const displayName = input.display_name.trim()
+  const bio = input.bio?.trim() || null
+
+  if (!/^[a-z0-9_]{3,30}$/.test(username)) {
+    throw new ProfileServiceError('invalid_profile', 'O nome de usuário informado é inválido.')
+  }
+  if (displayName.length < 1 || displayName.length > 80) {
+    throw new ProfileServiceError('invalid_profile', 'O nome de exibição deve ter entre 1 e 80 caracteres.')
+  }
+  if (bio && bio.length > 500) {
+    throw new ProfileServiceError('invalid_profile', 'A bio deve ter no máximo 500 caracteres.')
+  }
+
+  return {
+    username,
+    display_name: displayName,
+    bio,
+    is_discoverable: Boolean(input.is_discoverable),
+  }
+}
+
+function belongsToUser(path: string, userId: string): boolean {
+  return path.startsWith(`${userId}/`) && !path.slice(userId.length + 1).includes('/')
+}
+
 export async function fetchOwnProfile(): Promise<Profile> {
   const client = requireClient()
   const userId = await currentUserId()
-  const { data, error } = await client.from('profiles').select('*').eq('user_id', userId).maybeSingle()
+  const { data, error } = await client
+    .from('profiles')
+    .select(PROFILE_COLUMNS)
+    .eq('user_id', userId)
+    .maybeSingle()
 
   if (error) throw mapRequestError(error)
   if (!data) throw new ProfileServiceError('not_found', 'Seu perfil ainda não está disponível.')
   return data as Profile
 }
 
-export async function updateOwnProfile(input: ProfileInput): Promise<Profile> {
+export async function updateOwnProfile(input: ProfileInput, avatarPath?: string | null): Promise<Profile> {
   const client = requireClient()
   const userId = await currentUserId()
+  const normalizedInput = normalizeProfileInput(input)
+
+  if (avatarPath !== undefined && avatarPath !== null && !belongsToUser(avatarPath, userId)) {
+    throw new ProfileServiceError('invalid_avatar', 'O caminho do avatar não pertence à conta autenticada.')
+  }
+
+  const changes = avatarPath === undefined
+    ? normalizedInput
+    : { ...normalizedInput, avatar_path: avatarPath }
   const { data, error } = await client
     .from('profiles')
-    .update(input)
+    .update(changes)
     .eq('user_id', userId)
-    .select('*')
+    .select(PROFILE_COLUMNS)
     .maybeSingle()
 
   if (error) throw mapRequestError(error)
@@ -84,8 +125,8 @@ export function validateAvatar(file: File): void {
   if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
     throw new ProfileServiceError('invalid_avatar', 'Escolha uma imagem JPG, PNG ou WebP.')
   }
-  if (file.size > AVATAR_MAX_BYTES) {
-    throw new ProfileServiceError('invalid_avatar', 'A imagem deve ter no máximo 5 MB.')
+  if (file.size <= 0 || file.size > AVATAR_MAX_BYTES) {
+    throw new ProfileServiceError('invalid_avatar', 'A imagem deve ter conteúdo e no máximo 5 MB.')
   }
 }
 
@@ -94,7 +135,7 @@ export async function uploadOwnAvatar(file: File): Promise<string> {
   const client = requireClient()
   const userId = await currentUserId()
   const extension = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
-  const path = `${userId}/avatar-${Date.now()}.${extension}`
+  const path = `${userId}/avatar-${Date.now()}-${crypto.randomUUID()}.${extension}`
   const { error } = await client.storage.from(AVATAR_BUCKET).upload(path, file, {
     cacheControl: '3600',
     contentType: file.type,
@@ -104,27 +145,10 @@ export async function uploadOwnAvatar(file: File): Promise<string> {
   return path
 }
 
-export async function setOwnAvatarPath(path: string | null): Promise<Profile> {
-  const client = requireClient()
-  const userId = await currentUserId()
-  if (path && !path.startsWith(`${userId}/`)) {
-    throw new ProfileServiceError('invalid_avatar', 'O caminho do avatar não pertence à conta autenticada.')
-  }
-  const { data, error } = await client
-    .from('profiles')
-    .update({ avatar_path: path })
-    .eq('user_id', userId)
-    .select('*')
-    .maybeSingle()
-  if (error) throw mapRequestError(error)
-  if (!data) throw new ProfileServiceError('not_found', 'Seu perfil não foi encontrado para atualização.')
-  return data as Profile
-}
-
 export async function removeOwnAvatarObject(path: string): Promise<void> {
   const client = requireClient()
   const userId = await currentUserId()
-  if (!path.startsWith(`${userId}/`)) return
+  if (!belongsToUser(path, userId)) return
   const { error } = await client.storage.from(AVATAR_BUCKET).remove([path])
   if (error) throw mapRequestError(error)
 }
@@ -133,7 +157,7 @@ export async function createOwnAvatarUrl(path: string | null): Promise<string | 
   if (!path) return null
   const client = requireClient()
   const userId = await currentUserId()
-  if (!path.startsWith(`${userId}/`)) {
+  if (!belongsToUser(path, userId)) {
     throw new ProfileServiceError('invalid_avatar', 'O avatar solicitado não pertence à conta autenticada.')
   }
   const { data, error } = await client.storage.from(AVATAR_BUCKET).createSignedUrl(path, 3600)
