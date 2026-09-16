@@ -32,6 +32,7 @@ const highlights = [
 export function LandingPage({ onNavigate }: LandingPageProps) {
   return (
     <div className="landing-page">
+      <div className="landing-version-check" role="status">HI-YOU-VERSION-CHECK-2026-09-16</div>
       <header className="landing-header">
         <a className="landing-brand" href="#inicio" aria-label="Hi You! — início">
           <span className="landing-brand-mark" aria-hidden="true">H</span>
