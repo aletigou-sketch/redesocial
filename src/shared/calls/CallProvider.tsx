@@ -35,6 +35,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const runtime = useRef<Runtime | null>(null)
   const audio = useRef<HTMLAudioElement | null>(null)
   const userId = useRef(user?.id.toLowerCase() ?? null)
+  const sessionUserId = useRef(user?.id.toLowerCase() ?? null)
   const generation = useRef(0)
   userId.current = user?.id.toLowerCase() ?? null
 
@@ -50,12 +51,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
     const current = runtime.current
     if (!current || (expectedCallId && current.callId !== expectedCallId)) return
     generation.current += 1
+    runtime.current = null
     current.peer?.close()
     stopStream(current.localStream)
     stopStream(current.remoteStream)
     current.pendingIce.length = 0
     if (audio.current) audio.current.srcObject = null
-    runtime.current = null
     updateCall((value) => value && (!expectedCallId || value.callId === expectedCallId) ? { ...value, localStream: null, remoteStream: null, cameraEnabled: false, microphoneEnabled: false } : value)
   }, [updateCall])
 
@@ -94,8 +95,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
     const peer = createMediaPeer(
       (candidate) => {
         if (runtime.current !== current) return
-        void signal(currentCall.conversationId, { type: 'ice', callId: currentCall.callId, from: userId.current ?? '', to: currentCall.userId, candidate })
-          .catch(() => failCall(currentCall.callId, 'A conexão de áudio perdeu a sinalização.'))
+        const ownId = userId.current
+        if (!ownId) return
+        void signal(currentCall.conversationId, { type: 'ice', callId: currentCall.callId, from: ownId, to: currentCall.userId, candidate })
+          .catch(() => failCall(currentCall.callId, 'A chamada perdeu a sinalização.'))
       },
       (remoteStream) => {
         if (runtime.current !== current) {
@@ -112,7 +115,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       (state) => {
         if (runtime.current !== current) return
         if (state === 'connected') updateCall((value) => value?.callId === currentCall.callId ? { ...value, status: 'connected', error: null } : value)
-        if (state === 'failed' || state === 'closed') failCall(currentCall.callId, 'A conexão de áudio foi encerrada.')
+        if (state === 'failed' || state === 'closed') failCall(currentCall.callId, 'A conexão de mídia foi encerrada.')
         if (state === 'disconnected') updateCall((value) => value?.callId === currentCall.callId ? { ...value, status: 'connecting' } : value)
       },
     )
@@ -198,9 +201,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
       if (channels.current.has(conversationId)) continue
       const channel = openCallChannel(
         conversationId,
-        (incoming) => void handleSignal(conversationId, incoming).catch(() => {
+        (incoming) => void handleSignal(conversationId, incoming).catch((cause) => {
           const active = runtime.current
-          if (active?.conversationId === conversationId) failCall(active.callId, 'A sinalização da chamada falhou.')
+          const snapshot = callRef.current
+          if (active?.conversationId !== conversationId || snapshot?.callId !== active.callId) return
+          const message = cause instanceof DOMException
+            ? mediaError(cause, snapshot.kind)
+            : 'A sinalização da chamada falhou.'
+          failCall(active.callId, message)
         }),
         (connected) => {
           const active = runtime.current
@@ -222,7 +230,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const startCall = useCallback(async (peer: CallPeer, kind: CallKind = 'audio') => {
     const ownId = userId.current
     if (!ownId || runtime.current || callRef.current) return
-    registerPeers([peer])
+    registerPeers([...peers.current.values(), peer])
     const conversationId = peer.conversationId.toLowerCase()
     const callId = crypto.randomUUID()
     const next: ActiveCall = { ...peer, conversationId, userId: peer.userId.toLowerCase(), callId, kind, direction: 'outgoing', status: 'initiating', error: null, microphoneEnabled: false, cameraEnabled: false, localStream: null, remoteStream: null }
@@ -316,6 +324,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
   }, [cleanupMedia, signal, updateCall])
 
   useEffect(() => {
+    const nextUserId = user?.id.toLowerCase() ?? null
+    if (sessionUserId.current === nextUserId) return
+    sessionUserId.current = nextUserId
     cleanupMedia()
     updateCall(null)
     for (const channel of channels.current.values()) void closeCallChannel(channel)

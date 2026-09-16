@@ -38,11 +38,11 @@ export function CallOverlay() {
 
   return <aside className={`call-overlay is-${call.status} is-${call.kind}`} role="dialog" aria-modal="false" aria-labelledby={titleId} aria-describedby={statusId}>
     {call.kind === 'video' && <div className="call-video-stage">
-      {call.remoteStream ? <MediaVideo stream={call.remoteStream} label={`Vídeo remoto de ${call.displayName}`} className="call-video-remote" /> : <div className="call-video-placeholder"><Video aria-hidden="true" /><span>{call.status === 'connected' ? 'Câmera remota indisponível' : 'Aguardando vídeo remoto'}</span></div>}
+      {call.remoteStream ? <MediaVideo stream={call.remoteStream} muted label={`Vídeo remoto de ${call.displayName}`} className="call-video-remote" /> : <div className="call-video-placeholder"><Video aria-hidden="true" /><span>{call.status === 'connected' ? 'Câmera remota indisponível' : 'Aguardando vídeo remoto'}</span></div>}
       {call.localStream && <MediaVideo stream={call.localStream} muted label="Prévia da sua câmera" className={`call-video-local ${call.cameraEnabled ? '' : 'is-camera-off'}`} />}
     </div>}
     <div className="call-avatar">{call.kind === 'video' ? <Video aria-hidden="true" /> : <Mic aria-hidden="true" />}</div>
-    <div className="call-copy"><strong id={titleId}>{call.displayName}</strong><small>@{call.username}</small><span id={statusId} aria-live="polite">{call.status === 'receiving' ? `Videochamada ${labels.receiving}` : labels[call.status]}</span>{call.error && <p role="alert">{call.error}</p>}</div>
+    <div className="call-copy"><strong id={titleId}>{call.displayName}</strong><small>@{call.username}</small><span id={statusId} aria-live="polite">{call.status === 'receiving' ? `${call.kind === 'video' ? 'Videochamada' : 'Chamada de áudio'} ${labels.receiving}` : labels[call.status]}</span>{call.error && <p role="alert">{call.error}</p>}</div>
     <div className="call-actions">
       {call.status === 'receiving' && <><button type="button" className="call-button accept" onClick={() => void acceptCall()} aria-label={`Aceitar ${call.kind === 'video' ? 'videochamada' : 'chamada de áudio'}`}><Phone aria-hidden="true" /></button><button type="button" className="call-button decline" onClick={() => void declineCall()} aria-label="Recusar chamada"><PhoneOff aria-hidden="true" /></button></>}
       {!finished && call.status !== 'receiving' && <>

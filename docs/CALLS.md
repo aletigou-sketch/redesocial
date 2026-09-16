@@ -14,7 +14,7 @@ Chamadas de áudio solicitam somente o microfone. Videochamadas solicitam câmer
 
 Permissão recusada, dispositivo ausente, dispositivo ocupado e restrição incompatível produzem estado de falha com mensagem explícita. Durante uma chamada ativa, microfone e câmera podem ser desativados e reativados alterando `MediaStreamTrack.enabled`, sem criar nova negociação. Se uma track deixar de estar disponível, o controle informa indisponibilidade. Troca automática do dispositivo físico durante a chamada não é implementada; mudanças escolhidas no sistema operacional dependem do comportamento do navegador.
 
-O vídeo remoto ocupa a área principal, e a prévia local é exibida sem áudio para evitar retorno. Chamadas de áudio preservam o fluxo e a interface compacta existentes. Os controles possuem nomes acessíveis, estado pressionado e alvos adequados para desktop e mobile.
+O vídeo remoto ocupa a área principal e permanece silenciado no elemento visual, enquanto o áudio remoto é reproduzido por um único elemento dedicado; a prévia local também é exibida sem áudio para evitar retorno e reprodução duplicada. Chamadas de áudio preservam o fluxo e a interface compacta existentes. Os controles possuem nomes acessíveis, estado pressionado e alvos adequados para desktop e mobile.
 
 ## Negociação, estados e cleanup
 
