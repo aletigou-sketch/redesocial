@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Camera, LoaderCircle, RefreshCw, Trash2, UserRound } from 'lucide-react'
 import { useProfile } from '../../shared/profile/ProfileContext'
+import { usePresence } from '../../shared/presence/PresenceContext'
 import type { ProfileInput } from '../../shared/profile/profileService'
 
 interface FormErrors { username?: string; displayName?: string; bio?: string; avatar?: string }
 
 export function ProfilePage() {
   const { profile, avatarUrl, status, error, isLoading, isSaving, reloadProfile, saveProfile } = useProfile()
+  const { ownStatus } = usePresence()
   const [form, setForm] = useState<ProfileInput>({ username: '', display_name: '', bio: null, is_discoverable: false })
   const [avatar, setAvatar] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -74,7 +76,7 @@ export function ProfilePage() {
         <div className="profile-cover" />
         <div className="profile-identity">
           <span className="profile-avatar">{shownAvatar ? <img src={shownAvatar} alt="Avatar atual do perfil" /> : initials}</span>
-          <div><p className="eyebrow">SEU PERFIL</p><h1>{profile.display_name}</h1><span>@{profile.username}</span></div>
+          <div><p className="eyebrow">SEU PERFIL</p><h1>{profile.display_name}</h1><span>@{profile.username}</span><span className={`profile-presence is-${ownStatus}`}><i aria-hidden="true" />{ownStatus === 'online' ? 'Online' : ownStatus === 'away' ? 'Ausente' : 'Offline'}</span></div>
         </div>
       </header>
 

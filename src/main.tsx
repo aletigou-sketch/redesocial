@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { App } from './app/App'
 import { AuthProvider } from './shared/auth/AuthProvider'
 import { ProfileProvider } from './shared/profile/ProfileProvider'
+import { PresenceProvider } from './shared/presence/PresenceProvider'
 import './styles/index.css'
 
 const root = document.getElementById('root')
@@ -13,7 +14,9 @@ createRoot(root).render(
   <StrictMode>
     <AuthProvider>
       <ProfileProvider>
-        <App />
+        <PresenceProvider>
+          <App />
+        </PresenceProvider>
       </ProfileProvider>
     </AuthProvider>
   </StrictMode>,

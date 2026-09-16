@@ -2,7 +2,7 @@
 
 ## Núcleo implementado
 
-O módulo `src/features/messages` implementa conversas privadas entre exatamente dois perfis, envio de texto, histórico paginado, atualização em tempo real e estados de carregamento, vazio, erro, reconexão e entrega. Não inclui grupos de chat, anexos, áudio, reações, presença, chamadas, notificações ou recursos de moderação adicionais.
+O módulo `src/features/messages` implementa conversas privadas entre exatamente dois perfis, envio de texto, histórico paginado, atualização em tempo real e estados de carregamento, vazio, erro, reconexão e entrega. Não inclui grupos de chat, anexos, áudio, reações, chamadas, notificações ou recursos de moderação adicionais. A presença básica foi integrada posteriormente por uma camada compartilhada e está documentada em `docs/PRESENCE.md`.
 
 A migration `20260916000600_create_private_messages.sql` cria `private_conversations` e `private_messages`. Os dois participantes ficam em colunas obrigatórias, distintas e ordenadas, com unicidade do par; assim, uma conversa não pode adquirir um terceiro participante. Mensagens possuem UUID próprio, timestamp UTC e `client_message_id` único por remetente para tornar reenvios idempotentes.
 
@@ -18,7 +18,7 @@ A função de criação usa par canônico, constraint única e bloqueio transaci
 
 A lista de conversas é obtida em uma chamada, incluindo perfil correspondente e última mensagem, sem N+1. O histórico usa cursor composto por `created_at` e `id`, ordenação determinística e páginas de até 30 itens na interface. O índice `(conversation_id, created_at desc, id desc)` atende esse acesso.
 
-A assinatura Realtime é criada apenas para a conversa selecionada e filtrada por `conversation_id`. A tabela permanece protegida por SELECT/RLS; a interface trata a assinatura apenas como transporte, nunca como autorização. Respostas assíncronas e estados de canais antigos são descartados após a troca de conversa, e o carregamento inicial é mesclado com eventos recebidos durante a consulta para evitar perda ou contaminação entre históricos. A arquitetura mantém conversas e mensagens isoladas e pode receber presença ou chamadas em módulos futuros sem antecipar sua implementação.
+A assinatura Realtime é criada apenas para a conversa selecionada e filtrada por `conversation_id`. A tabela permanece protegida por SELECT/RLS; a interface trata a assinatura apenas como transporte, nunca como autorização. Respostas assíncronas e estados de canais antigos são descartados após a troca de conversa, e o carregamento inicial é mesclado com eventos recebidos durante a consulta para evitar perda ou contaminação entre históricos. A arquitetura mantém conversas e mensagens isoladas. A presença usa um canal privado separado por conversa, sem misturar estado efêmero ao histórico; chamadas continuam apenas preparadas para evolução futura.
 
 ## Limitações e validação operacional pendente
 

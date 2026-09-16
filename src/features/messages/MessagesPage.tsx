@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { LoaderCircle, MessageCircle, Plus, RefreshCw, Send } from 'lucide-react'
 import { useAuth } from '../../shared/auth/AuthContext'
+import { usePresenceScope } from '../../shared/presence/PresenceContext'
 import { createConversation, fetchConversations, fetchMessages, messagePageSize, MessageServiceError, sendMessage, subscribeToMessages, unsubscribeFromMessages, type Conversation, type Message } from './messageService'
 import './messages.css'
 
@@ -30,6 +31,8 @@ export function MessagesPage() {
   const request = useRef(0)
   const selectedId = useRef<string | null>(null)
   selectedId.current = selected?.id ?? null
+  const presence = usePresenceScope(selected ? { kind: 'conversation', id: selected.id } : null)
+  const otherPresence = selected ? presence.users.get(selected.otherUserId) ?? 'offline' : 'offline'
 
   const handleError = useCallback(async (cause: unknown, fallback: string) => {
     if (cause instanceof MessageServiceError && cause.code === 'session_expired') {
@@ -173,7 +176,7 @@ export function MessagesPage() {
       </aside>
       <div className="messages-thread">
         {!selected ? <div className="messages-empty"><MessageCircle size={42} /><h2>Escolha uma conversa</h2><p>Seu histórico privado aparecerá aqui.</p></div> : <>
-          <header className="thread-header"><div><strong>{selected.displayName}</strong><small>@{selected.username}</small></div><span className={connected ? 'is-online' : ''}>{connected ? 'Tempo real conectado' : 'Reconectando…'}</span></header>
+          <header className="thread-header"><div><strong>{selected.displayName}</strong><small>@{selected.username}</small></div><div className="thread-status"><span className={`presence-label is-${otherPresence}`}><i aria-hidden="true" />{otherPresence === 'online' ? 'Online' : otherPresence === 'away' ? 'Ausente' : 'Offline'}</span><span className={connected ? 'is-online' : ''}>{connected ? 'Mensagens conectadas' : 'Reconectando mensagens…'}</span>{!presence.connected && <small>Presença reconectando…</small>}</div></header>
           <div className="thread-history" aria-live="polite">
             {hasOlder && <button className="history-button" onClick={() => void loadOlder()} disabled={historyStatus === 'loading'}>{historyStatus === 'loading' ? 'Carregando…' : 'Carregar anteriores'}</button>}
             {historyStatus === 'loading' && messages.length === 0 && <div className="messages-empty"><LoaderCircle className="spin" /> Carregando histórico…</div>}
