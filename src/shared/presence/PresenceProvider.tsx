@@ -7,14 +7,14 @@ const AWAY_AFTER_MS = 5 * 60 * 1000
 
 export function PresenceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
-  const [ownStatus, setOwnStatus] = useState<PresenceStatus>(user ? 'online' : 'offline')
+  const [ownStatus, setOwnStatus] = useState<PresenceStatus>(user && navigator.onLine ? 'online' : 'offline')
   const statusRef = useRef<PresenceStatus>(ownStatus)
   const activityTimer = useRef<number | null>(null)
 
   const applyStatus = useCallback((next: PresenceStatus) => {
     statusRef.current = next
     setOwnStatus(next)
-    if (user && next !== 'offline') updateLocalPresence(user.id, next)
+    if (user) updateLocalPresence(user.id, next)
   }, [user?.id])
 
   useEffect(() => {
@@ -26,6 +26,11 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
     const scheduleAway = () => {
       if (activityTimer.current !== null) window.clearTimeout(activityTimer.current)
+      activityTimer.current = null
+      if (!navigator.onLine) {
+        applyStatus('offline')
+        return
+      }
       if (document.visibilityState === 'hidden') {
         applyStatus('away')
         return
@@ -34,7 +39,11 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       activityTimer.current = window.setTimeout(() => applyStatus('away'), AWAY_AFTER_MS)
     }
     const handleVisibility = () => scheduleAway()
-    const handleOffline = () => applyStatus('offline')
+    const handleOffline = () => {
+      if (activityTimer.current !== null) window.clearTimeout(activityTimer.current)
+      activityTimer.current = null
+      applyStatus('offline')
+    }
     const handleOnline = () => scheduleAway()
 
     scheduleAway()
@@ -46,6 +55,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
     return () => {
       if (activityTimer.current !== null) window.clearTimeout(activityTimer.current)
+      activityTimer.current = null
       window.removeEventListener('pointerdown', scheduleAway)
       window.removeEventListener('keydown', scheduleAway)
       window.removeEventListener('online', handleOnline)
@@ -56,7 +66,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   }, [applyStatus, user?.id])
 
   const subscribe = useCallback((scope: PresenceScope, listener: (snapshot: PresenceSnapshot) => void) => {
-    if (!user || statusRef.current === 'offline') {
+    if (!user) {
       listener({ connected: false, users: new Map() })
       return () => undefined
     }

@@ -14,9 +14,10 @@ interface Entry {
   channel: RealtimeChannel
   listeners: Set<Listener>
   userId: string
-  status: Exclude<PresenceStatus, 'offline'>
+  status: PresenceStatus
   connected: boolean
   generation: number
+  operations: Promise<void>
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -32,15 +33,20 @@ function topicFor(scope: PresenceScope): string {
   return `presence:${scope.kind}:${scope.id.toLowerCase()}`
 }
 
+function isCurrent(topic: string, entry: Entry, generation: number) {
+  return entries.get(topic) === entry && entry.generation === generation
+}
+
 function readSnapshot(entry: Entry): PresenceSnapshot {
   const users = new Map<string, Exclude<PresenceStatus, 'offline'>>()
   const state = entry.channel.presenceState<PresencePayload>()
   for (const presences of Object.values(state)) {
     for (const presence of presences) {
       if (typeof presence.user_id !== 'string' || !UUID_PATTERN.test(presence.user_id)) continue
+      const userId = presence.user_id.toLowerCase()
       const status = presence.status === 'away' ? 'away' : presence.status === 'online' ? 'online' : null
       if (!status) continue
-      if (status === 'online' || !users.has(presence.user_id)) users.set(presence.user_id, status)
+      if (status === 'online' || !users.has(userId)) users.set(userId, status)
     }
   }
   return { connected: entry.connected, users }
@@ -51,82 +57,112 @@ function emit(entry: Entry) {
   for (const listener of entry.listeners) listener(snapshot)
 }
 
-async function track(entry: Entry) {
+function queueReconcile(topic: string, entry: Entry) {
   const generation = entry.generation
-  await entry.channel.track({ user_id: entry.userId, status: entry.status })
-  if (entry.generation !== generation) return
-  emit(entry)
+  entry.operations = entry.operations.then(async () => {
+    if (!isCurrent(topic, entry, generation) || !entry.connected) return
+    if (entry.status === 'offline') {
+      await entry.channel.untrack()
+    } else {
+      await entry.channel.track({ user_id: entry.userId, status: entry.status })
+    }
+    if (isCurrent(topic, entry, generation)) emit(entry)
+  }).catch(() => {
+    if (!isCurrent(topic, entry, generation)) return
+    entry.connected = false
+    emit(entry)
+  })
+}
+
+function removeEntry(topic: string, entry: Entry) {
+  if (entries.get(topic) === entry) entries.delete(topic)
+  entry.generation += 1
+  entry.connected = false
+  const channel = entry.channel
+  entry.operations = entry.operations.catch(() => undefined).then(async () => {
+    await channel.untrack().catch(() => undefined)
+    if (supabase) await supabase.removeChannel(channel).catch(() => undefined)
+  })
+}
+
+function createEntry(topic: string, userId: string, status: PresenceStatus): Entry {
+  const channel = client().channel(topic, { config: { private: true, presence: { key: userId } } })
+  const entry: Entry = {
+    channel,
+    listeners: new Set(),
+    userId: userId.toLowerCase(),
+    status,
+    connected: false,
+    generation: 0,
+    operations: Promise.resolve(),
+  }
+  entries.set(topic, entry)
+
+  channel
+    .on('presence', { event: 'sync' }, () => {
+      if (entries.get(topic) === entry) emit(entry)
+    })
+    .on('presence', { event: 'join' }, () => {
+      if (entries.get(topic) === entry) emit(entry)
+    })
+    .on('presence', { event: 'leave' }, () => {
+      if (entries.get(topic) === entry) emit(entry)
+    })
+    .subscribe((channelStatus) => {
+      if (entries.get(topic) !== entry) return
+      entry.connected = channelStatus === 'SUBSCRIBED'
+      entry.generation += 1
+      emit(entry)
+      if (entry.connected) queueReconcile(topic, entry)
+    })
+
+  return entry
 }
 
 export function subscribeToPresence(
   scope: PresenceScope,
   userId: string,
-  status: Exclude<PresenceStatus, 'offline'>,
+  status: PresenceStatus,
   listener: Listener,
 ): () => void {
   if (!UUID_PATTERN.test(userId)) throw new Error('A sessão de presença é inválida.')
+  const normalizedUserId = userId.toLowerCase()
   const topic = topicFor(scope)
   let entry = entries.get(topic)
 
-  if (!entry) {
-    const channel = client().channel(topic, { config: { private: true, presence: { key: userId } } })
-    entry = { channel, listeners: new Set(), userId, status, connected: false, generation: 0 }
-    entries.set(topic, entry)
-    const current = entry
-    channel
-      .on('presence', { event: 'sync' }, () => emit(current))
-      .on('presence', { event: 'join' }, () => emit(current))
-      .on('presence', { event: 'leave' }, () => emit(current))
-      .subscribe((channelStatus) => {
-        const active = entries.get(topic)
-        if (active !== current) return
-        current.connected = channelStatus === 'SUBSCRIBED'
-        current.generation += 1
-        emit(current)
-        if (current.connected) void track(current).catch(() => {
-          current.connected = false
-          emit(current)
-        })
-      })
-  } else if (entry.userId !== userId) {
-    throw new Error('O contexto de presença pertence a outra sessão.')
+  if (entry && entry.userId !== normalizedUserId) {
+    removeEntry(topic, entry)
+    entry = undefined
   }
+  if (!entry) entry = createEntry(topic, normalizedUserId, status)
 
   entry.status = status
-  entry.listeners.add(listener)
+  const subscriptionListener: Listener = (snapshot) => listener(snapshot)
+  entry.listeners.add(subscriptionListener)
   listener(readSnapshot(entry))
-  if (entry.connected) void track(entry).catch(() => undefined)
+  if (entry.connected) {
+    entry.generation += 1
+    queueReconcile(topic, entry)
+  }
 
   return () => {
     const active = entries.get(topic)
-    if (!active) return
-    active.listeners.delete(listener)
-    if (active.listeners.size) return
-    entries.delete(topic)
-    active.generation += 1
-    active.connected = false
-    void active.channel.untrack().catch(() => undefined).finally(() => {
-      if (supabase) void supabase.removeChannel(active.channel)
-    })
+    if (!active || active !== entry) return
+    active.listeners.delete(subscriptionListener)
+    if (!active.listeners.size) removeEntry(topic, active)
   }
 }
 
-export function updateLocalPresence(userId: string, status: Exclude<PresenceStatus, 'offline'>) {
-  for (const entry of entries.values()) {
-    if (entry.userId !== userId || entry.status === status) continue
+export function updateLocalPresence(userId: string, status: PresenceStatus) {
+  const normalizedUserId = userId.toLowerCase()
+  for (const [topic, entry] of entries) {
+    if (entry.userId !== normalizedUserId || entry.status === status) continue
     entry.status = status
     entry.generation += 1
-    if (entry.connected) void track(entry).catch(() => undefined)
+    if (entry.connected) queueReconcile(topic, entry)
   }
 }
 
 export function clearPresence() {
-  for (const [topic, entry] of entries) {
-    entries.delete(topic)
-    entry.generation += 1
-    entry.connected = false
-    void entry.channel.untrack().catch(() => undefined).finally(() => {
-      if (supabase) void supabase.removeChannel(entry.channel)
-    })
-  }
+  for (const [topic, entry] of [...entries]) removeEntry(topic, entry)
 }
