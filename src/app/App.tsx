@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { AppShell } from './AppShell'
 import { AuthPage, type AuthView } from '../features/auth/AuthPage'
-import { HomePage } from '../features/home/HomePage'
-import { AdminPage } from '../features/admin/AdminPage'
 import { useAuth } from '../shared/auth/AuthContext'
+
+const HomePage = lazy(() => import('../features/home/HomePage').then((module) => ({ default: module.HomePage })))
+const AdminPage = lazy(() => import('../features/admin/AdminPage').then((module) => ({ default: module.AdminPage })))
 import { PublicOnly, RequireAuth } from '../shared/auth/AuthGuards'
 import type { NavigationItem } from '../shared/types/navigation'
 
@@ -44,7 +45,7 @@ export function App() {
   if (path === '/admin') {
     return (
       <RequireAuth loadingFallback={<LoadingScreen />} unauthenticatedFallback={<LoadingScreen />} configurationFallback={<AuthPage view="login" onNavigate={navigate} />}>
-        <AdminPage onExit={() => navigate('/app')} />
+        <Suspense fallback={<LoadingScreen />}><AdminPage onExit={() => navigate('/app')} /></Suspense>
       </RequireAuth>
     )
   }
@@ -64,7 +65,7 @@ export function App() {
       configurationFallback={<AuthPage view="login" onNavigate={navigate} />}
     >
       <AppShell activeItem={activeItem} onNavigate={setActiveItem} onSignedOut={() => navigate('/login', true)}>
-        <HomePage activeItem={activeItem} onNavigate={setActiveItem} />
+        <Suspense fallback={<LoadingScreen />}><HomePage activeItem={activeItem} onNavigate={setActiveItem} /></Suspense>
       </AppShell>
     </RequireAuth>
   )

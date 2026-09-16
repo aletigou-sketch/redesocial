@@ -1,12 +1,17 @@
-import { useState } from 'react'
-import { ArrowRight, ChevronRight, Image, MapPin, MessageCircle, MoreHorizontal, Plus, Send, Users } from 'lucide-react'
+import { lazy, Suspense, useState } from 'react'
+import { ArrowRight, ChevronRight, Image, LoaderCircle, MapPin, MessageCircle, MoreHorizontal, Plus, Send, Users } from 'lucide-react'
 import type { NavigationItem } from '../../shared/types/navigation'
-import { ProfilePage } from '../profile/ProfilePage'
-import { StoriesPage } from '../stories/StoriesPage'
-import { GroupsPage } from '../groups/GroupsPage'
-import { MessagesPage } from '../messages/MessagesPage'
-import { NotificationsPage } from '../notifications/NotificationsPage'
 import { conversations, stories } from './data'
+
+const ProfilePage = lazy(() => import('../profile/ProfilePage').then((module) => ({ default: module.ProfilePage })))
+const StoriesPage = lazy(() => import('../stories/StoriesPage').then((module) => ({ default: module.StoriesPage })))
+const GroupsPage = lazy(() => import('../groups/GroupsPage').then((module) => ({ default: module.GroupsPage })))
+const MessagesPage = lazy(() => import('../messages/MessagesPage').then((module) => ({ default: module.MessagesPage })))
+const NotificationsPage = lazy(() => import('../notifications/NotificationsPage').then((module) => ({ default: module.NotificationsPage })))
+
+function SectionLoading() {
+  return <section className="section-loading" aria-live="polite"><LoaderCircle className="spin" aria-hidden="true" /><strong>Carregando área…</strong></section>
+}
 
 interface HomePageProps { activeItem: NavigationItem; onNavigate: (item: NavigationItem) => void }
 
@@ -14,11 +19,11 @@ export function HomePage({ activeItem, onNavigate }: HomePageProps) {
   const [composerOpen, setComposerOpen] = useState(false)
   const [liked, setLiked] = useState(false)
 
-  if (activeItem === 'profile') return <ProfilePage />
-  if (activeItem === 'stories') return <StoriesPage />
-  if (activeItem === 'groups') return <GroupsPage />
-  if (activeItem === 'messages') return <MessagesPage />
-  if (activeItem === 'notifications') return <NotificationsPage onNavigate={onNavigate} />
+  if (activeItem === 'profile') return <Suspense fallback={<SectionLoading />}><ProfilePage /></Suspense>
+  if (activeItem === 'stories') return <Suspense fallback={<SectionLoading />}><StoriesPage /></Suspense>
+  if (activeItem === 'groups') return <Suspense fallback={<SectionLoading />}><GroupsPage /></Suspense>
+  if (activeItem === 'messages') return <Suspense fallback={<SectionLoading />}><MessagesPage /></Suspense>
+  if (activeItem === 'notifications') return <Suspense fallback={<SectionLoading />}><NotificationsPage onNavigate={onNavigate} /></Suspense>
   if (activeItem !== 'home') return <EmptySection section={activeItem} />
 
   return (
@@ -30,7 +35,7 @@ export function HomePage({ activeItem, onNavigate }: HomePageProps) {
         </div>
 
         <section className="stories-section" aria-labelledby="stories-title">
-          <div className="section-heading"><h2 id="stories-title">Stories</h2><button>Ver todos <ChevronRight size={16} /></button></div>
+          <div className="section-heading"><h2 id="stories-title">Stories</h2><button onClick={() => onNavigate('stories')}>Ver todos <ChevronRight size={16} /></button></div>
           <div className="stories-list">
             {stories.map((story) => (
               <button className="story" key={story.id}>
@@ -75,7 +80,7 @@ export function HomePage({ activeItem, onNavigate }: HomePageProps) {
 
       <aside className="right-column">
         <section className="side-panel">
-          <div className="section-heading"><h2>Mensagens</h2><button>Ver todas</button></div>
+          <div className="section-heading"><h2>Mensagens</h2><button onClick={() => onNavigate('messages')}>Ver todas</button></div>
           <div className="conversation-list">
             {conversations.map((item) => (
               <button className="conversation" key={item.id}>
@@ -85,11 +90,11 @@ export function HomePage({ activeItem, onNavigate }: HomePageProps) {
               </button>
             ))}
           </div>
-          <button className="secondary-button full-width"><MessageCircle size={17} /> Nova mensagem</button>
+          <button className="secondary-button full-width" onClick={() => onNavigate('messages')}><MessageCircle size={17} /> Nova mensagem</button>
         </section>
 
         <section className="side-panel groups-panel">
-          <div className="section-heading"><h2>Seus grupos</h2><button>Explorar</button></div>
+          <div className="section-heading"><h2>Seus grupos</h2><button onClick={() => onNavigate('groups')}>Explorar</button></div>
           <button className="group-row"><span className="group-icon warm">🌄</span><span><strong>Trilhas SP</strong><small>2 novas mensagens</small></span><ArrowRight size={16}/></button>
           <button className="group-row"><span className="group-icon purple">✦</span><span><strong>Design & Café</strong><small>128 membros</small></span><ArrowRight size={16}/></button>
           <button className="group-create"><Users size={18}/><span><strong>Encontre sua turma</strong><small>Descubra grupos com a sua cara</small></span><Plus size={16}/></button>
