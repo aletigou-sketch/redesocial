@@ -4,6 +4,7 @@ import type { NavigationItem } from '../../shared/types/navigation'
 import { ProfilePage } from '../profile/ProfilePage'
 import { StoriesPage } from '../stories/StoriesPage'
 import { GroupsPage } from '../groups/GroupsPage'
+import { MessagesPage } from '../messages/MessagesPage'
 import { conversations, stories } from './data'
 
 interface HomePageProps { activeItem: NavigationItem }
@@ -15,6 +16,7 @@ export function HomePage({ activeItem }: HomePageProps) {
   if (activeItem === 'profile') return <ProfilePage />
   if (activeItem === 'stories') return <StoriesPage />
   if (activeItem === 'groups') return <GroupsPage />
+  if (activeItem === 'messages') return <MessagesPage />
   if (activeItem !== 'home') return <EmptySection section={activeItem} />
 
   return (
